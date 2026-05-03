@@ -63,6 +63,7 @@ export interface SendFeedbackReceipt {
 export type { FeedbackSubmission, FeedbackReceipt } from "./types.js";
 
 const MAX_ATTRIBUTE_VALUE_LENGTH = 200;
+const MAX_EVENT_MESSAGE_LENGTH = 2000;
 const SLUG_REGEX = /^[a-z0-9-]+$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -188,13 +189,16 @@ function createEvent(
   userId?: string,
   sessionIdOverride?: string,
 ): LogEvent {
+  const trimmedMessage =
+    message.length > MAX_EVENT_MESSAGE_LENGTH ? message.slice(0, MAX_EVENT_MESSAGE_LENGTH) : message;
+
   return {
     client_event_id: randomUUID(),
     session_id: sessionIdOverride ?? ctx.sessionId,
     ...(userId ? { user_id: userId } : {}),
     level,
     source_module: getSourceModule(),
-    message,
+    message: trimmedMessage,
     custom_attributes: normalizeAttributes(attrs),
     ...(Object.keys(experiments).length > 0 ? { experiments: { ...experiments } } : {}),
     environment: "backend",

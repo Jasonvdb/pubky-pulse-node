@@ -122,6 +122,22 @@ describe("Owl", () => {
     assert.equal(events[0].custom_attributes.long.length, 200);
   });
 
+  it("truncates message at 2000 chars", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+
+    const longMessage = "x".repeat(5000);
+    Owl.info(longMessage);
+    await Owl.flush();
+
+    const events = userEvents(parseBody(getCalls()[0].init));
+    assert.equal(events[0].message.length, 2000);
+    assert.equal(events[0].message, "x".repeat(2000));
+  });
+
   it("coerces non-string attribute values to string", async () => {
     Owl.configure({
       endpoint: "http://localhost:4000",
