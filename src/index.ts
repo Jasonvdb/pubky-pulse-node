@@ -171,6 +171,7 @@ let transport: Transport | null = null;
 let attachmentUploader: AttachmentUploader | null = null;
 let sessionId: string | null = null;
 let beforeExitRegistered = false;
+let sessionStartedEmitted = false;
 
 function ensureConfigured(): { config: ValidatedConfig; transport: Transport; sessionId: string } {
   if (!config || !transport || !sessionId) {
@@ -333,6 +334,10 @@ function log(
   }
   try {
     const ctx = ensureConfigured();
+    if (!sessionStartedEmitted && !message.startsWith("sdk:")) {
+      sessionStartedEmitted = true;
+      ctx.transport.enqueue(createEvent(ctx, "info", "sdk:session_started"));
+    }
     printToConsole(level, message, attrs);
     const event = createEvent(ctx, level, message, attrs, userId, sessionIdOverride);
     ctx.transport.enqueue(event);
@@ -480,6 +485,7 @@ export const Owl = {
     transport = new Transport(config);
     attachmentUploader = new AttachmentUploader(config);
     sessionId = randomUUID();
+    sessionStartedEmitted = false;
 
     loadExperiments();
 
@@ -498,9 +504,6 @@ export const Owl = {
         }
       });
     }
-
-    // Emit session start event
-    log("info", "sdk:session_started");
   },
 
   info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
@@ -663,7 +666,9 @@ export const Owl = {
 
   async shutdown(): Promise<void> {
     if (transport) {
-      log("info", "sdk:session_ended");
+      if (sessionStartedEmitted) {
+        log("info", "sdk:session_ended");
+      }
       await transport.shutdown();
       transport = null;
     }
@@ -673,5 +678,6 @@ export const Owl = {
     }
     config = null;
     sessionId = null;
+    sessionStartedEmitted = false;
   },
 };

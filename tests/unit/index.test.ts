@@ -263,4 +263,98 @@ describe("Owl", () => {
     assert.ok(secondEvent, "second event not found in any call");
     assert.notEqual(firstEvent.session_id, secondEvent.session_id);
   });
+
+  it("does not emit sdk:session_started when configure() is called but no events are tracked", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    await Owl.flush();
+    assert.equal(getCallCount(), 0);
+  });
+
+  it("emits sdk:session_started immediately before the first user event", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    Owl.info("hello");
+    await Owl.flush();
+
+    const body = parseBody(getCalls()[0].init);
+    assert.equal(body.events.length, 2);
+    assert.equal(body.events[0].message, "sdk:session_started");
+    assert.equal(body.events[1].message, "hello");
+  });
+
+  it("emits sdk:session_started exactly once across multiple user events", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    Owl.info("first");
+    Owl.info("second");
+    Owl.info("third");
+    await Owl.flush();
+
+    const body = parseBody(getCalls()[0].init);
+    const starts = body.events.filter((e: { message?: string }) => e.message === "sdk:session_started");
+    assert.equal(starts.length, 1);
+    assert.equal(body.events[0].message, "sdk:session_started");
+  });
+
+  it("does not emit sdk:session_ended on shutdown when no user events were tracked", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    await Owl.shutdown();
+    assert.equal(getCallCount(), 0);
+  });
+
+  it("emits sdk:session_ended on shutdown when user events were tracked", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    Owl.info("hello");
+    await Owl.shutdown();
+
+    assert.ok(findEventByMessage("sdk:session_started"));
+    assert.ok(findEventByMessage("hello"));
+    assert.ok(findEventByMessage("sdk:session_ended"));
+  });
+
+  it("resets the session_started gate across configure cycles", async () => {
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    Owl.info("first");
+    await Owl.shutdown();
+
+    Owl.configure({
+      endpoint: "http://localhost:4000",
+      apiKey: "owl_client_test_1234567890123456789012345678",
+      flushThreshold: 100,
+    });
+    Owl.info("second");
+    await Owl.flush();
+
+    const starts: Array<{ session_id: string }> = [];
+    for (const call of getCalls()) {
+      const body = parseBody(call.init);
+      for (const e of body.events) {
+        if (e.message === "sdk:session_started") starts.push(e);
+      }
+    }
+    assert.equal(starts.length, 2);
+    assert.notEqual(starts[0].session_id, starts[1].session_id);
+  });
 });
