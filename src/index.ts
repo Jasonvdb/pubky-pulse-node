@@ -235,7 +235,7 @@ function printToConsole(level: OwlLogLevel, message: string, attrs?: Record<stri
     displayMessage = message;
   }
 
-  let line = `🦉 Owlmetry ${tag} ${displayMessage}`;
+  let line = `🦉  ${tag} ${displayMessage}`;
   if (attrs && Object.keys(attrs).length > 0) {
     const pairs = Object.entries(attrs)
       .sort(([a], [b]) => a.localeCompare(b))
