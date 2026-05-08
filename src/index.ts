@@ -428,6 +428,10 @@ export class ScopedOwl {
    * fields into reserved `_error_*` attributes. The server's issue tracker
    * uses `_error_type` as a fingerprint discriminator so different error
    * classes with the same wording stay on separate issues.
+   *
+   * The `_error_*` namespace is reserved — any caller-provided keys with that
+   * prefix are overwritten by the SDK-extracted values to keep fingerprinting
+   * and dashboard rendering consistent.
    */
   error(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
   error(
@@ -436,22 +440,7 @@ export class ScopedOwl {
     optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
     maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
   ): void {
-    if (typeof messageOrError === "string") {
-      const attrs = attrsOrMessage as Record<string, unknown> | undefined;
-      const options = optionsOrAttrs as { attachments?: OwlAttachment[]; sessionId?: string } | undefined;
-      log("error", messageOrError, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
-      return;
-    }
-    const userMessage = typeof attrsOrMessage === "string" ? attrsOrMessage : undefined;
-    const userAttrs = (typeof attrsOrMessage === "object" ? attrsOrMessage : optionsOrAttrs) as
-      | Record<string, unknown>
-      | undefined;
-    const options = (typeof attrsOrMessage === "object" ? optionsOrAttrs : maybeOptions) as
-      | { attachments?: OwlAttachment[]; sessionId?: string }
-      | undefined;
-    const extracted = extractErrorAttributes(messageOrError, userMessage);
-    const merged: Record<string, unknown> = { ...(userAttrs ?? {}), ...extracted.attributes };
-    log("error", extracted.message, merged, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
+    logError(this.userId, this.sessionId, messageOrError, attrsOrMessage, optionsOrAttrs, maybeOptions);
   }
 
   /**
@@ -512,13 +501,13 @@ export class ScopedOwl {
 }
 
 /**
- * `Owl.error` accepts either a string message (logger-style) or an `Error`
- * value (exception-style). When given an Error, the SDK extracts type, stack,
- * cause chain, and Node errno fields into `_error_*` reserved attributes.
+ * Shared body for `Owl.error` (top-level, no scope) and `ScopedOwl.error`
+ * (scoped to a userId / sessionId). Disambiguates between the string-message
+ * overload and the Error-value overload at runtime via `typeof` checks.
  */
-function errorOnOwl(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
-function errorOnOwl(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
-function errorOnOwl(
+function logError(
+  userId: string | undefined,
+  defaultSessionId: string | undefined,
   messageOrError: string | unknown,
   attrsOrMessage?: Record<string, unknown> | string,
   optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
@@ -527,7 +516,7 @@ function errorOnOwl(
   if (typeof messageOrError === "string") {
     const attrs = attrsOrMessage as Record<string, unknown> | undefined;
     const options = optionsOrAttrs as { attachments?: OwlAttachment[]; sessionId?: string } | undefined;
-    log("error", messageOrError, attrs, undefined, options?.attachments, options?.sessionId);
+    log("error", messageOrError, attrs, userId, options?.attachments, options?.sessionId ?? defaultSessionId);
     return;
   }
   const userMessage = typeof attrsOrMessage === "string" ? attrsOrMessage : undefined;
@@ -538,8 +527,21 @@ function errorOnOwl(
     | { attachments?: OwlAttachment[]; sessionId?: string }
     | undefined;
   const extracted = extractErrorAttributes(messageOrError, userMessage);
+  // SDK-extracted `_error_*` values overwrite any caller-provided ones in the
+  // same namespace; non-`_error_*` keys from the caller pass through.
   const merged: Record<string, unknown> = { ...(userAttrs ?? {}), ...extracted.attributes };
-  log("error", extracted.message, merged, undefined, options?.attachments, options?.sessionId);
+  log("error", extracted.message, merged, userId, options?.attachments, options?.sessionId ?? defaultSessionId);
+}
+
+function errorOnOwl(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+function errorOnOwl(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+function errorOnOwl(
+  messageOrError: string | unknown,
+  attrsOrMessage?: Record<string, unknown> | string,
+  optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
+  maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+): void {
+  logError(undefined, undefined, messageOrError, attrsOrMessage, optionsOrAttrs, maybeOptions);
 }
 
 /**
