@@ -15,6 +15,7 @@ function makeConfig(overrides?: Partial<ValidatedConfig>): ValidatedConfig {
     flushThreshold: 5,
     maxBufferSize: 100,
     consoleLogging: false,
+    captureUnhandled: false,
     ...overrides,
   };
 }

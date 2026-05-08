@@ -27,6 +27,22 @@ export interface OwlConfiguration {
   isDev?: boolean;
   /** Print events to console. Defaults to true. */
   consoleLogging?: boolean;
+  /**
+   * Auto-capture unhandled errors as `Owl.error` events. Default: true.
+   *
+   * When enabled, the SDK installs `process.on('uncaughtException')` and
+   * `process.on('unhandledRejection')` listeners. The handlers:
+   *  - Are additive — they coexist with any handlers your app has registered.
+   *  - Capture the error, then preserve Node's default crash behavior:
+   *    if the SDK is the only listener, the process still exits like it would
+   *    have without the SDK loaded; if your app has its own listener, that
+   *    listener controls whether the process recovers.
+   *  - Wrap all SDK code in try/catch and a re-entry guard, so a failure
+   *    inside the SDK never compounds the original crash.
+   *
+   * Pass `false` to opt out and rely on explicit `Owl.error(err)` calls only.
+   */
+  captureUnhandled?: boolean;
 }
 
 export interface LogEvent {

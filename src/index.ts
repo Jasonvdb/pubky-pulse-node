@@ -15,6 +15,7 @@ import {
 } from "./types.js";
 import { OwlOperation } from "./operation.js";
 import { AttachmentUploader, type OwlAttachment } from "./attachment-uploader.js";
+import { extractErrorAttributes } from "./error-extraction.js";
 
 export type { OwlConfiguration, OwlLogLevel, LogEvent } from "./types.js";
 export type { OwlAttachment } from "./attachment-uploader.js";
@@ -64,6 +65,14 @@ export type { FeedbackSubmission, FeedbackReceipt } from "./types.js";
 
 const MAX_ATTRIBUTE_VALUE_LENGTH = 200;
 const MAX_EVENT_MESSAGE_LENGTH = 2000;
+
+// Per-key length overrides for trusted SDK-reserved attributes (always
+// underscore-prefixed). Mirrors the server's
+// RESERVED_ATTRIBUTE_VALUE_LENGTH_OVERRIDES so stack traces survive the
+// SDK's pre-transport trim.
+const RESERVED_ATTRIBUTE_VALUE_LENGTH_OVERRIDES: Readonly<Record<string, number>> = {
+  _error_stack: 16000,
+};
 const SLUG_REGEX = /^[a-z0-9-]+$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -159,8 +168,9 @@ function normalizeAttributes(attrs?: Record<string, unknown>): Record<string, st
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(attrs)) {
     let str = String(value);
-    if (str.length > MAX_ATTRIBUTE_VALUE_LENGTH) {
-      str = str.slice(0, MAX_ATTRIBUTE_VALUE_LENGTH);
+    const cap = RESERVED_ATTRIBUTE_VALUE_LENGTH_OVERRIDES[key] ?? MAX_ATTRIBUTE_VALUE_LENGTH;
+    if (str.length > cap) {
+      str = str.slice(0, cap);
     }
     result[key] = str;
   }
@@ -173,6 +183,15 @@ let attachmentUploader: AttachmentUploader | null = null;
 let sessionId: string | null = null;
 let beforeExitRegistered = false;
 let sessionStartedEmitted = false;
+
+// Auto-capture state. Re-entry guard prevents the handler from triggering
+// itself if the SDK throws while capturing. `seenErrors` dedupes between the
+// unhandledRejection -> uncaughtException escalation in Node's default
+// --unhandled-rejections=throw mode (the same error fires twice).
+let inCaptureHandler = false;
+const seenErrors = new WeakSet<object>();
+let uncaughtHandler: ((err: unknown) => void) | null = null;
+let rejectionHandler: ((reason: unknown) => void) | null = null;
 
 function ensureConfigured(): { config: ValidatedConfig; transport: Transport; sessionId: string } {
   if (!config || !transport || !sessionId) {
@@ -402,8 +421,37 @@ export class ScopedOwl {
     log("warn", message, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
   }
 
-  error(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
-    log("error", message, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
+  error(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+  /**
+   * Report an error/exception value. Extracts `_error_type`, `_error_stack`,
+   * `Error.cause` chains, AggregateError children, and Node `code/syscall/path`
+   * fields into reserved `_error_*` attributes. The server's issue tracker
+   * uses `_error_type` as a fingerprint discriminator so different error
+   * classes with the same wording stay on separate issues.
+   */
+  error(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+  error(
+    messageOrError: string | unknown,
+    attrsOrMessage?: Record<string, unknown> | string,
+    optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
+    maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+  ): void {
+    if (typeof messageOrError === "string") {
+      const attrs = attrsOrMessage as Record<string, unknown> | undefined;
+      const options = optionsOrAttrs as { attachments?: OwlAttachment[]; sessionId?: string } | undefined;
+      log("error", messageOrError, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
+      return;
+    }
+    const userMessage = typeof attrsOrMessage === "string" ? attrsOrMessage : undefined;
+    const userAttrs = (typeof attrsOrMessage === "object" ? attrsOrMessage : optionsOrAttrs) as
+      | Record<string, unknown>
+      | undefined;
+    const options = (typeof attrsOrMessage === "object" ? optionsOrAttrs : maybeOptions) as
+      | { attachments?: OwlAttachment[]; sessionId?: string }
+      | undefined;
+    const extracted = extractErrorAttributes(messageOrError, userMessage);
+    const merged: Record<string, unknown> = { ...(userAttrs ?? {}), ...extracted.attributes };
+    log("error", extracted.message, merged, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
   }
 
   /**
@@ -464,6 +512,139 @@ export class ScopedOwl {
 }
 
 /**
+ * `Owl.error` accepts either a string message (logger-style) or an `Error`
+ * value (exception-style). When given an Error, the SDK extracts type, stack,
+ * cause chain, and Node errno fields into `_error_*` reserved attributes.
+ */
+function errorOnOwl(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+function errorOnOwl(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+function errorOnOwl(
+  messageOrError: string | unknown,
+  attrsOrMessage?: Record<string, unknown> | string,
+  optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
+  maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+): void {
+  if (typeof messageOrError === "string") {
+    const attrs = attrsOrMessage as Record<string, unknown> | undefined;
+    const options = optionsOrAttrs as { attachments?: OwlAttachment[]; sessionId?: string } | undefined;
+    log("error", messageOrError, attrs, undefined, options?.attachments, options?.sessionId);
+    return;
+  }
+  const userMessage = typeof attrsOrMessage === "string" ? attrsOrMessage : undefined;
+  const userAttrs = (typeof attrsOrMessage === "object" ? attrsOrMessage : optionsOrAttrs) as
+    | Record<string, unknown>
+    | undefined;
+  const options = (typeof attrsOrMessage === "object" ? optionsOrAttrs : maybeOptions) as
+    | { attachments?: OwlAttachment[]; sessionId?: string }
+    | undefined;
+  const extracted = extractErrorAttributes(messageOrError, userMessage);
+  const merged: Record<string, unknown> = { ...(userAttrs ?? {}), ...extracted.attributes };
+  log("error", extracted.message, merged, undefined, options?.attachments, options?.sessionId);
+}
+
+/**
+ * Capture an unhandled error/rejection into the event stream. Wrapped in
+ * try/catch so a SDK failure never compounds the original crash.
+ */
+function captureUnhandledError(err: unknown, kind: "uncaught_exception" | "unhandled_rejection"): void {
+  // Dedupe between the unhandledRejection -> uncaughtException escalation
+  // path in Node's default mode. Only object errors can be tracked in a
+  // WeakSet — primitives slip through and are captured twice (rare and
+  // acceptable).
+  if (typeof err === "object" && err !== null) {
+    if (seenErrors.has(err)) return;
+    seenErrors.add(err);
+  }
+  try {
+    if (!config || !transport || !sessionId) return;
+    const extracted = extractErrorAttributes(err);
+    const merged: Record<string, string> = { ...extracted.attributes, _unhandled: kind };
+    const ctx = { config, sessionId };
+    const event = createEvent(ctx, "error", extracted.message, merged);
+    transport.enqueue(event);
+  } catch (sdkErr) {
+    if (config?.debug) {
+      console.error("Owlmetry: error capturing unhandled", sdkErr);
+    }
+  }
+}
+
+/**
+ * Best-effort flush before a hard crash. Races a real flush against a 200ms
+ * timeout so we don't wedge the process indefinitely if the network is slow.
+ */
+async function flushBeforeCrash(): Promise<void> {
+  if (!transport) return;
+  const tx = transport;
+  await Promise.race([
+    tx.flush().catch(() => {}),
+    new Promise<void>((resolve) => setTimeout(resolve, 200)),
+  ]);
+}
+
+function installUnhandledHandlers(): void {
+  if (uncaughtHandler || rejectionHandler) return;
+  if (typeof process?.on !== "function") return;
+
+  uncaughtHandler = (err: unknown) => {
+    if (inCaptureHandler) return;
+    inCaptureHandler = true;
+    try {
+      captureUnhandledError(err, "uncaught_exception");
+    } finally {
+      inCaptureHandler = false;
+    }
+    // Preserve Node's default crash behavior. Registering a uncaughtException
+    // handler suppresses the default crash, so if we're the only listener
+    // we must explicitly exit(1) after best-effort flush. If the user has
+    // their own handler, we step out and let it decide.
+    const isOnlyListener = process.listenerCount("uncaughtException") <= 1;
+    if (isOnlyListener) {
+      flushBeforeCrash().finally(() => {
+        // Re-check listenerCount in case the user attached a handler during
+        // the async flush window (unlikely but harmless).
+        if (process.listenerCount("uncaughtException") <= 1) {
+          process.exit(1);
+        }
+      });
+    }
+  };
+
+  rejectionHandler = (reason: unknown) => {
+    if (inCaptureHandler) return;
+    inCaptureHandler = true;
+    try {
+      captureUnhandledError(reason, "unhandled_rejection");
+    } finally {
+      inCaptureHandler = false;
+    }
+    // Same reasoning as uncaughtException: a registered handler suppresses
+    // Node's default --unhandled-rejections=throw escalation. If we're the
+    // only listener, throw to force the escalation; uncaughtException then
+    // runs our other handler (which dedupes via the seenErrors WeakSet)
+    // and exits.
+    if (process.listenerCount("unhandledRejection") <= 1) {
+      throw reason;
+    }
+  };
+
+  process.on("uncaughtException", uncaughtHandler);
+  process.on("unhandledRejection", rejectionHandler);
+}
+
+function uninstallUnhandledHandlers(): void {
+  if (typeof process?.off !== "function") return;
+  if (uncaughtHandler) {
+    process.off("uncaughtException", uncaughtHandler);
+    uncaughtHandler = null;
+  }
+  if (rejectionHandler) {
+    process.off("unhandledRejection", rejectionHandler);
+    rejectionHandler = null;
+  }
+}
+
+/**
  * Owlmetry Node.js Server SDK.
  *
  * Usage:
@@ -508,6 +689,12 @@ export const Owl = {
         }
       });
     }
+
+    if (config.captureUnhandled) {
+      installUnhandledHandlers();
+    } else {
+      uninstallUnhandledHandlers();
+    }
   },
 
   info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
@@ -522,9 +709,7 @@ export const Owl = {
     log("warn", message, attrs, undefined, options?.attachments, options?.sessionId);
   },
 
-  error(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
-    log("error", message, attrs, undefined, options?.attachments, options?.sessionId);
-  },
+  error: errorOnOwl,
 
   /**
    * Record a named funnel step. Sends an info-level event with message `step:<stepName>`.
@@ -669,6 +854,7 @@ export const Owl = {
   },
 
   async shutdown(): Promise<void> {
+    uninstallUnhandledHandlers();
     if (transport) {
       if (sessionStartedEmitted) {
         log("info", "sdk:session_ended");

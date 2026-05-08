@@ -13,6 +13,7 @@ export interface ValidatedConfig {
   flushThreshold: number;
   maxBufferSize: number;
   consoleLogging: boolean;
+  captureUnhandled: boolean;
 }
 
 export function validateConfiguration(config: OwlConfiguration): ValidatedConfig {
@@ -51,5 +52,6 @@ export function validateConfiguration(config: OwlConfiguration): ValidatedConfig
     flushThreshold: config.flushThreshold ?? 20,
     maxBufferSize: config.maxBufferSize ?? 10000,
     consoleLogging: config.consoleLogging ?? true,
+    captureUnhandled: config.captureUnhandled ?? true,
   };
 }
