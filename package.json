@@ -24,8 +24,8 @@
   "scripts": {
     "build": "tsup",
     "build:tests": "tsc",
-    "test": "npm run build:tests && node --test dist-tests/tests/unit/*.test.js",
-    "test:integration": "npm run build:tests && node --test dist-tests/tests/integration/*.test.js",
+    "test": "npm run build && npm run build:tests && node --test dist-tests/tests/unit/*.test.js",
+    "test:integration": "npm run build && npm run build:tests && node --test dist-tests/tests/integration/*.test.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
