@@ -6,6 +6,7 @@ const GZIP_THRESHOLD = 512;
 const MAX_BATCH_SIZE = 20;
 const MAX_RETRIES = 5;
 const MAX_BACKOFF_MS = 30000;
+const MAX_RETRY_AFTER_MS = 60000;
 const REQUEST_TIMEOUT_MS = 10000;
 
 function extractServerError(text: string): string | null {
@@ -19,11 +20,58 @@ function extractServerError(text: string): string | null {
   return null;
 }
 
+/**
+ * Parse a `Retry-After` value into milliseconds. Both forms RFC 9110 allows are
+ * accepted — delta-seconds and an HTTP-date — and anything absent, empty or
+ * unparsable yields null so the caller keeps its backoff ladder.
+ */
+function parseRetryAfterMs(value: string | null, now: number): number | null {
+  if (value === null) return null;
+
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1000;
+  }
+
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, at - now);
+}
+
+/**
+ * How long to wait before retrying `attempt`. The exponential ladder is the
+ * floor; on a 429 or 503 a longer `Retry-After` from the server wins, and the
+ * whole thing is capped so a hostile or mistaken header cannot stall a send.
+ *
+ * Exported for unit tests; not part of the package's public API.
+ */
+export function retryDelayMs(attempt: number, res?: Response, now: number = Date.now()): number {
+  const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
+  if (!res || (res.status !== 429 && res.status !== 503)) return backoff;
+
+  const retryAfter = parseRetryAfterMs(res.headers.get("retry-after"), now);
+  if (retryAfter === null) return backoff;
+
+  return Math.min(Math.max(retryAfter, backoff), MAX_RETRY_AFTER_MS);
+}
+
+/**
+ * Sleep before the next attempt, or return immediately when the attempt that
+ * just failed was the last one. `res` is the response that failed, when there
+ * was one — a network error has none.
+ */
+async function waitBeforeRetry(attempt: number, res?: Response): Promise<void> {
+  if (attempt >= MAX_RETRIES) return;
+  await new Promise((r) => setTimeout(r, retryDelayMs(attempt, res)));
+}
+
 export class Transport {
   private buffer: LogEvent[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private config: ValidatedConfig;
-  private flushing = false;
+  private inFlight: Promise<void> | null = null;
 
   constructor(config: ValidatedConfig) {
     this.config = config;
@@ -46,18 +94,24 @@ export class Transport {
     }
   }
 
+  /**
+   * Drain the buffer. A caller arriving while a flush is already running waits
+   * for it — including a send asleep in the retry ladder — and then sends
+   * whatever was buffered meanwhile, so nothing is left behind.
+   */
   async flush(): Promise<void> {
-    if (this.buffer.length === 0 || this.flushing) return;
-    this.flushing = true;
-
-    try {
-      while (this.buffer.length > 0) {
-        const batch = this.buffer.splice(0, MAX_BATCH_SIZE);
-        await this.sendBatch(batch);
-      }
-    } finally {
-      this.flushing = false;
+    while (this.inFlight) {
+      await this.inFlight.catch(() => {});
     }
+    if (this.buffer.length === 0) return;
+
+    // Published before the first await, so concurrent callers see it and wait
+    // rather than starting a second drain.
+    const run = this.drain().finally(() => {
+      this.inFlight = null;
+    });
+    this.inFlight = run;
+    await run;
   }
 
   async shutdown(): Promise<void> {
@@ -72,6 +126,13 @@ export class Transport {
     return this.buffer.length;
   }
 
+  private async drain(): Promise<void> {
+    while (this.buffer.length > 0) {
+      const batch = this.buffer.splice(0, MAX_BATCH_SIZE);
+      await this.sendBatch(batch);
+    }
+  }
+
   private logError(message: string, err: unknown): void {
     if (this.config.debug) {
       console.error(`Pubky Pulse: ${message}`, err);
@@ -82,8 +143,9 @@ export class Transport {
     const body = JSON.stringify({ user_id: userId, properties });
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      let res: Response | undefined;
       try {
-        const res = await fetch(`${this.config.endpoint}/v1/identity/properties`, {
+        res = await fetch(`${this.config.endpoint}/v1/identity/properties`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -102,20 +164,13 @@ export class Transport {
           }
           return;
         }
-
-        if (attempt < MAX_RETRIES) {
-          const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
-          await new Promise((r) => setTimeout(r, backoff));
-        }
       } catch (err) {
         if (this.config.debug) {
           console.error("Pubky Pulse: network error during setUserProperties", err);
         }
-        if (attempt < MAX_RETRIES) {
-          const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
-          await new Promise((r) => setTimeout(r, backoff));
-        }
       }
+
+      await waitBeforeRetry(attempt, res);
     }
 
     if (this.config.debug) {
@@ -135,8 +190,9 @@ export class Transport {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      let res: Response | undefined;
       try {
-        const res = await fetch(`${this.config.endpoint}/v1/feedback`, {
+        res = await fetch(`${this.config.endpoint}/v1/feedback`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -172,10 +228,7 @@ export class Transport {
         }
       }
 
-      if (attempt < MAX_RETRIES) {
-        const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
-        await new Promise((r) => setTimeout(r, backoff));
-      }
+      await waitBeforeRetry(attempt, res);
     }
 
     throw lastError ?? new Error("Pubky Pulse: sendFeedback failed after retries");
@@ -197,6 +250,7 @@ export class Transport {
       }
 
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        let res: Response | undefined;
         try {
           const headers: Record<string, string> = {
             "Content-Type": "application/json",
@@ -206,7 +260,7 @@ export class Transport {
             headers["Content-Encoding"] = contentEncoding;
           }
 
-          const res = await fetch(`${this.config.endpoint}/v1/ingest`, {
+          res = await fetch(`${this.config.endpoint}/v1/ingest`, {
             method: "POST",
             headers,
             body: payload as BodyInit,
@@ -223,21 +277,13 @@ export class Transport {
             }
             return;
           }
-
-          // Server error or 429 — retry with backoff
-          if (attempt < MAX_RETRIES) {
-            const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
-            await new Promise((r) => setTimeout(r, backoff));
-          }
         } catch (err) {
           if (this.config.debug) {
             console.error("Pubky Pulse: network error during ingest", err);
           }
-          if (attempt < MAX_RETRIES) {
-            const backoff = Math.min(Math.pow(2, attempt) * 1000, MAX_BACKOFF_MS);
-            await new Promise((r) => setTimeout(r, backoff));
-          }
         }
+
+        await waitBeforeRetry(attempt, res);
       }
 
       if (this.config.debug) {
