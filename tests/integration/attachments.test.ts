@@ -4,13 +4,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Owl } from "../../src/index.js";
+import { Pulse } from "../../src/index.js";
 import { AttachmentUploader } from "../../src/attachment-uploader.js";
 import { validateConfiguration } from "../../src/configuration.js";
 
-const ENDPOINT = process.env.OWLMETRY_TEST_ENDPOINT || "http://127.0.0.1:4112";
-const SERVER_KEY = process.env.OWLMETRY_TEST_SERVER_KEY!;
-const AGENT_KEY = process.env.OWLMETRY_TEST_AGENT_KEY!;
+const ENDPOINT = process.env.PULSE_TEST_ENDPOINT || "http://127.0.0.1:4112";
+const SERVER_KEY = process.env.PULSE_TEST_SERVER_KEY!;
+const AGENT_KEY = process.env.PULSE_TEST_AGENT_KEY!;
 
 interface EventRow {
   message: string;
@@ -74,7 +74,7 @@ async function findEventClientId(messageMatch: string, maxWaitMs = 3_000): Promi
 
 describe("Node SDK attachments", () => {
   before(() => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: ENDPOINT,
       apiKey: SERVER_KEY,
       appVersion: "1.0.0-test",
@@ -84,17 +84,17 @@ describe("Node SDK attachments", () => {
   });
 
   after(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
   });
 
   it("uploads an attachment from a Buffer", async () => {
     const payload = Buffer.from("hello bytes");
     const message = `attach-buffer-${randomUUID()}`;
 
-    Owl.error(message, { stage: "test" }, {
+    Pulse.error(message, { stage: "test" }, {
       attachments: [{ buffer: payload, name: "hello.txt", contentType: "text/plain" }],
     });
-    await Owl.flush();
+    await Pulse.flush();
 
     const clientEventId = await findEventClientId(message);
     const attachments = await waitForAttachments(clientEventId, 1);
@@ -110,7 +110,7 @@ describe("Node SDK attachments", () => {
   });
 
   it("uploads an attachment from a file path and infers the filename + MIME", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "owl-attach-"));
+    const dir = mkdtempSync(join(tmpdir(), "pulse-attach-"));
     const filename = "report.log";
     const filepath = join(dir, filename);
     const payload = Buffer.from("file-based attachment");
@@ -118,8 +118,8 @@ describe("Node SDK attachments", () => {
 
     try {
       const message = `attach-path-${randomUUID()}`;
-      Owl.error(message, {}, { attachments: [{ path: filepath }] });
-      await Owl.flush();
+      Pulse.error(message, {}, { attachments: [{ path: filepath }] });
+      await Pulse.flush();
 
       const clientEventId = await findEventClientId(message);
       const attachments = await waitForAttachments(clientEventId, 1);
@@ -137,13 +137,13 @@ describe("Node SDK attachments", () => {
 
   it("uploads multiple attachments on a single event", async () => {
     const message = `attach-multi-${randomUUID()}`;
-    Owl.error(message, {}, {
+    Pulse.error(message, {}, {
       attachments: [
         { buffer: Buffer.from("first"), name: "a.txt", contentType: "text/plain" },
         { buffer: Buffer.from("second"), name: "b.txt", contentType: "text/plain" },
       ],
     });
-    await Owl.flush();
+    await Pulse.flush();
 
     const clientEventId = await findEventClientId(message);
     const attachments = await waitForAttachments(clientEventId, 2);
@@ -153,15 +153,15 @@ describe("Node SDK attachments", () => {
     assert.deepEqual(names, new Set(["a.txt", "b.txt"]));
   });
 
-  it("Owl.flush() awaits pending attachment uploads", async () => {
+  it("Pulse.flush() awaits pending attachment uploads", async () => {
     // After flush() resolves, the PUT must already have completed — no polling.
     const payload = Buffer.from("flush-proves-await");
     const message = `attach-flush-${randomUUID()}`;
 
-    Owl.error(message, {}, {
+    Pulse.error(message, {}, {
       attachments: [{ buffer: payload, name: "flush.bin", contentType: "application/octet-stream" }],
     });
-    await Owl.flush();
+    await Pulse.flush();
 
     const clientEventId = await findEventClientId(message);
     const attachments = await queryAttachments(clientEventId);

@@ -1,5 +1,5 @@
 {
-  "name": "owlmetry-demo-node",
+  "name": "pubky-pulse-demo-node",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,6 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@owlmetry/node": "file:../.."
+    "@synonymdev/pubky-pulse-node": "file:../.."
   }
 }

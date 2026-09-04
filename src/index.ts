@@ -4,19 +4,19 @@ import { Transport } from "./transport.js";
 import {
   SDK_NAME,
   SDK_VERSION,
-  type OwlConfiguration,
-  type OwlLogLevel,
+  type PulseConfiguration,
+  type PulseLogLevel,
   type LogEvent,
   type FeedbackSubmission,
   type FeedbackReceipt,
 } from "./types.js";
-import { OwlOperation } from "./operation.js";
-import { AttachmentUploader, type OwlAttachment } from "./attachment-uploader.js";
+import { PulseOperation } from "./operation.js";
+import { AttachmentUploader, type PulseAttachment } from "./attachment-uploader.js";
 import { extractErrorAttributes } from "./error-extraction.js";
 
-export type { OwlConfiguration, OwlLogLevel, LogEvent } from "./types.js";
-export type { OwlAttachment } from "./attachment-uploader.js";
-export { OwlOperation } from "./operation.js";
+export type { PulseConfiguration, PulseLogLevel, LogEvent } from "./types.js";
+export type { PulseAttachment } from "./attachment-uploader.js";
+export { PulseOperation } from "./operation.js";
 
 const MAX_FEEDBACK_MESSAGE_LENGTH = 4000;
 
@@ -37,7 +37,7 @@ export interface SendFeedbackOptions {
   sessionId?: string;
   /**
    * Bundle ID — only needed when forwarding feedback on behalf of a mobile
-   * frontend whose Owlmetry app has a bundle_id set. Backend apps have no
+   * frontend whose Pubky Pulse app has a bundle_id set. Backend apps have no
    * bundle_id so this can be omitted.
    */
   bundleId?: string;
@@ -77,7 +77,7 @@ function validateSessionId(sessionId: string): string | undefined {
   if (!UUID_REGEX.test(sessionId)) {
     if (config?.debug) {
       console.error(
-        `Owlmetry: sessionId "${sessionId}" is not a valid UUID and was ignored. Falling back to the default session ID. The server stores session_id as a UUID column — non-UUID values cannot be ingested. The Swift SDK's Owl.sessionId is already a UUID, so forward it verbatim.`,
+        `Pubky Pulse: sessionId "${sessionId}" is not a valid UUID and was ignored. Falling back to the default session ID. The server stores session_id as a UUID column — non-UUID values cannot be ingested. The Swift SDK's Pulse.sessionId is already a UUID, so forward it verbatim.`,
       );
     }
     return undefined;
@@ -101,7 +101,7 @@ function normalizeSlug(slug: string): string {
     .replace(/^-+|-+$/g, "");
   if (config?.debug) {
     console.error(
-      `Owlmetry: metric slug "${slug}" was auto-corrected to "${normalized}". Slugs should contain only lowercase letters, numbers, and hyphens.`,
+      `Pubky Pulse: metric slug "${slug}" was auto-corrected to "${normalized}". Slugs should contain only lowercase letters, numbers, and hyphens.`,
     );
   }
   return normalized;
@@ -113,7 +113,7 @@ function getSourceModule(): string | undefined {
   if (!stack) return undefined;
 
   const lines = stack.split("\n");
-  // Skip: Error, at Object.<method> (index.ts), at Owl.<method> / ScopedOwl.<method>
+  // Skip: Error, at Object.<method> (index.ts), at Pulse.<method> / ScopedPulse.<method>
   // Find the first frame outside this file
   for (let i = 3; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -163,14 +163,14 @@ let rejectionHandler: ((reason: unknown) => void) | null = null;
 
 function ensureConfigured(): { config: ValidatedConfig; transport: Transport; sessionId: string } {
   if (!config || !transport || !sessionId) {
-    throw new Error("Owlmetry: not configured. Call Owl.configure() first.");
+    throw new Error("Pubky Pulse: not configured. Call Pulse.configure() first.");
   }
   return { config, transport, sessionId };
 }
 
 function createEvent(
   ctx: { config: ValidatedConfig; sessionId: string },
-  level: OwlLogLevel,
+  level: PulseLogLevel,
   message: string,
   attrs?: Record<string, unknown>,
   userId?: string,
@@ -196,7 +196,7 @@ function createEvent(
   };
 }
 
-function printToConsole(level: OwlLogLevel, message: string, attrs?: Record<string, unknown>): void {
+function printToConsole(level: PulseLogLevel, message: string, attrs?: Record<string, unknown>): void {
   if (!config?.consoleLogging) return;
   if (message.startsWith("sdk:")) return;
   if (message.startsWith("metric:") && message.endsWith(":start")) return;
@@ -221,7 +221,7 @@ function printToConsole(level: OwlLogLevel, message: string, attrs?: Record<stri
     displayMessage = message;
   }
 
-  let line = `🦉  ${tag} ${displayMessage}`;
+  let line = `[pulse] ${tag} ${displayMessage}`;
   if (attrs && Object.keys(attrs).length > 0) {
     const pairs = Object.entries(attrs)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -259,11 +259,11 @@ async function sendFeedbackInternal(
 
   const trimmedMessage = typeof message === "string" ? message.trim() : "";
   if (!trimmedMessage) {
-    throw new Error("Owlmetry: feedback message is required");
+    throw new Error("Pubky Pulse: feedback message is required");
   }
   if (trimmedMessage.length > MAX_FEEDBACK_MESSAGE_LENGTH) {
     throw new Error(
-      `Owlmetry: feedback message must be at most ${MAX_FEEDBACK_MESSAGE_LENGTH} characters`,
+      `Pubky Pulse: feedback message must be at most ${MAX_FEEDBACK_MESSAGE_LENGTH} characters`,
     );
   }
 
@@ -312,11 +312,11 @@ async function sendFeedbackInternal(
 }
 
 function log(
-  level: OwlLogLevel,
+  level: PulseLogLevel,
   message: string,
   attrs?: Record<string, unknown>,
   userId?: string,
-  attachments?: OwlAttachment[],
+  attachments?: PulseAttachment[],
   sessionIdOverride?: string,
 ): void {
   if (sessionIdOverride !== undefined) {
@@ -336,21 +336,21 @@ function log(
     }
   } catch (err) {
     if (config?.debug) {
-      console.error("Owlmetry:", err);
+      console.error("Pubky Pulse:", err);
     }
   }
 }
 
 /**
  * A scoped logger instance that automatically tags a user ID and/or a session ID
- * on every event. Create via `Owl.withUser(userId)` or `Owl.withSession(sessionId)`.
- * Scopes chain: `Owl.withSession(sid).withUser(uid)` and vice versa both work.
+ * on every event. Create via `Pulse.withUser(userId)` or `Pulse.withSession(sessionId)`.
+ * Scopes chain: `Pulse.withSession(sid).withUser(uid)` and vice versa both work.
  *
  * The session scope is typically used in a server handler to link backend events
- * to a client's session — e.g. read an `X-Owl-Session-Id` header sent by the
- * Swift SDK (`Owl.sessionId`) and scope every event in the handler to that value.
+ * to a client's session — e.g. read an `X-Pulse-Session-Id` header sent by the
+ * Swift SDK (`Pulse.sessionId`) and scope every event in the handler to that value.
  */
-export class ScopedOwl {
+export class ScopedPulse {
   private userId?: string;
   private sessionId?: string;
 
@@ -360,35 +360,35 @@ export class ScopedOwl {
   }
 
   /** Return a new scope with the given userId, preserving any existing session scope. */
-  withUser(userId: string): ScopedOwl {
-    return new ScopedOwl(userId, this.sessionId);
+  withUser(userId: string): ScopedPulse {
+    return new ScopedPulse(userId, this.sessionId);
   }
 
   /**
    * Return a new scope with the given sessionId, preserving any existing user scope.
    * `sessionId` should be a UUID string (as produced by `randomUUID()` or the Swift
-   * SDK's `Owl.sessionId`). Non-UUID values are silently ignored — the returned
+   * SDK's `Pulse.sessionId`). Non-UUID values are silently ignored — the returned
    * scope falls back to the SDK's default session ID — so untrusted client input
    * cannot crash a request handler. Enable `debug: true` on configure to see
    * warnings when invalid values are received.
    */
-  withSession(sessionId: string): ScopedOwl {
-    return new ScopedOwl(this.userId, validateSessionId(sessionId));
+  withSession(sessionId: string): ScopedPulse {
+    return new ScopedPulse(this.userId, validateSessionId(sessionId));
   }
 
-  info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("info", message, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
   }
 
-  debug(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  debug(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("debug", message, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
   }
 
-  warn(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  warn(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("warn", message, attrs, this.userId, options?.attachments, options?.sessionId ?? this.sessionId);
   }
 
-  error(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+  error(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void;
   /**
    * Report an error/exception value. Extracts `_error_type`, `_error_stack`,
    * `Error.cause` chains, AggregateError children, and Node `code/syscall/path`
@@ -400,12 +400,12 @@ export class ScopedOwl {
    * prefix are overwritten by the SDK-extracted values to keep fingerprinting
    * and dashboard rendering consistent.
    */
-  error(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
+  error(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void;
   error(
     messageOrError: string | unknown,
     attrsOrMessage?: Record<string, unknown> | string,
-    optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
-    maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+    optionsOrAttrs?: { attachments?: PulseAttachment[]; sessionId?: string } | Record<string, unknown>,
+    maybeOptions?: { attachments?: PulseAttachment[]; sessionId?: string },
   ): void {
     logError(this.userId, this.sessionId, messageOrError, attrsOrMessage, optionsOrAttrs, maybeOptions);
   }
@@ -431,9 +431,9 @@ export class ScopedOwl {
    */
   setUserProperties(properties: Record<string, string>): void {
     if (!this.userId) {
-      throw new Error("Owlmetry: setUserProperties requires a user-scoped instance. Call .withUser() first.");
+      throw new Error("Pubky Pulse: setUserProperties requires a user-scoped instance. Call .withUser() first.");
     }
-    Owl.setUserProperties(this.userId, properties);
+    Pulse.setUserProperties(this.userId, properties);
   }
 
   /**
@@ -441,8 +441,8 @@ export class ScopedOwl {
    * numbers, and hyphens (e.g. "photo-conversion", "api-request"). Invalid characters
    * are auto-corrected with a warning logged in debug mode.
    */
-  startOperation(metric: string, attrs?: Record<string, unknown>): OwlOperation {
-    return new OwlOperation(log, normalizeSlug(metric), attrs, this.userId, this.sessionId);
+  startOperation(metric: string, attrs?: Record<string, unknown>): PulseOperation {
+    return new PulseOperation(log, normalizeSlug(metric), attrs, this.userId, this.sessionId);
   }
 
   /**
@@ -455,7 +455,7 @@ export class ScopedOwl {
   }
 
   /**
-   * Forward user feedback collected from your frontend to Owlmetry. Defaults
+   * Forward user feedback collected from your frontend to Pubky Pulse. Defaults
    * `user_id` and `session_id` to the scope's values (override via `options`).
    *
    * Throws on failure — wrap calls in try/catch. Empty messages reject
@@ -468,7 +468,7 @@ export class ScopedOwl {
 }
 
 /**
- * Shared body for `Owl.error` (top-level, no scope) and `ScopedOwl.error`
+ * Shared body for `Pulse.error` (top-level, no scope) and `ScopedPulse.error`
  * (scoped to a userId / sessionId). Disambiguates between the string-message
  * overload and the Error-value overload at runtime via `typeof` checks.
  */
@@ -477,12 +477,12 @@ function logError(
   defaultSessionId: string | undefined,
   messageOrError: string | unknown,
   attrsOrMessage?: Record<string, unknown> | string,
-  optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
-  maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+  optionsOrAttrs?: { attachments?: PulseAttachment[]; sessionId?: string } | Record<string, unknown>,
+  maybeOptions?: { attachments?: PulseAttachment[]; sessionId?: string },
 ): void {
   if (typeof messageOrError === "string") {
     const attrs = attrsOrMessage as Record<string, unknown> | undefined;
-    const options = optionsOrAttrs as { attachments?: OwlAttachment[]; sessionId?: string } | undefined;
+    const options = optionsOrAttrs as { attachments?: PulseAttachment[]; sessionId?: string } | undefined;
     log("error", messageOrError, attrs, userId, options?.attachments, options?.sessionId ?? defaultSessionId);
     return;
   }
@@ -491,7 +491,7 @@ function logError(
     | Record<string, unknown>
     | undefined;
   const options = (typeof attrsOrMessage === "object" ? optionsOrAttrs : maybeOptions) as
-    | { attachments?: OwlAttachment[]; sessionId?: string }
+    | { attachments?: PulseAttachment[]; sessionId?: string }
     | undefined;
   const extracted = extractErrorAttributes(messageOrError, userMessage);
   // SDK-extracted `_error_*` values overwrite any caller-provided ones in the
@@ -500,13 +500,13 @@ function logError(
   log("error", extracted.message, merged, userId, options?.attachments, options?.sessionId ?? defaultSessionId);
 }
 
-function errorOnOwl(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
-function errorOnOwl(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void;
-function errorOnOwl(
+function errorOnPulse(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void;
+function errorOnPulse(error: Error | unknown, message?: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void;
+function errorOnPulse(
   messageOrError: string | unknown,
   attrsOrMessage?: Record<string, unknown> | string,
-  optionsOrAttrs?: { attachments?: OwlAttachment[]; sessionId?: string } | Record<string, unknown>,
-  maybeOptions?: { attachments?: OwlAttachment[]; sessionId?: string },
+  optionsOrAttrs?: { attachments?: PulseAttachment[]; sessionId?: string } | Record<string, unknown>,
+  maybeOptions?: { attachments?: PulseAttachment[]; sessionId?: string },
 ): void {
   logError(undefined, undefined, messageOrError, attrsOrMessage, optionsOrAttrs, maybeOptions);
 }
@@ -533,7 +533,7 @@ function captureUnhandledError(err: unknown, kind: "uncaught_exception" | "unhan
     transport.enqueue(event);
   } catch (sdkErr) {
     if (config?.debug) {
-      console.error("Owlmetry: error capturing unhandled", sdkErr);
+      console.error("Pubky Pulse: error capturing unhandled", sdkErr);
     }
   }
 }
@@ -614,23 +614,23 @@ function uninstallUnhandledHandlers(): void {
 }
 
 /**
- * Owlmetry Node.js Server SDK.
+ * Pubky Pulse Node.js Server SDK.
  *
  * Usage:
  * ```
- * import { Owl } from '@owlmetry/node';
+ * import { Pulse } from '@synonymdev/pubky-pulse-node';
  *
- * Owl.configure({ endpoint: 'https://...', apiKey: 'owl_client_...' });
- * Owl.info('Server started');
+ * Pulse.configure({ endpoint: 'https://...', apiKey: 'pulse_client_...' });
+ * Pulse.info('Server started');
  *
- * const owl = Owl.withUser('user_123');
- * owl.info('User logged in');
+ * const pulse = Pulse.withUser('user_123');
+ * pulse.info('User logged in');
  *
- * await Owl.shutdown();
+ * await Pulse.shutdown();
  * ```
  */
-export const Owl = {
-  configure(options: OwlConfiguration): void {
+export const Pulse = {
+  configure(options: PulseConfiguration): void {
     // Clean up previous transport if reconfiguring
     if (transport) {
       transport.shutdown().catch(() => {});
@@ -664,19 +664,19 @@ export const Owl = {
     }
   },
 
-  info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  info(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("info", message, attrs, undefined, options?.attachments, options?.sessionId);
   },
 
-  debug(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  debug(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("debug", message, attrs, undefined, options?.attachments, options?.sessionId);
   },
 
-  warn(message: string, attrs?: Record<string, unknown>, options?: { attachments?: OwlAttachment[]; sessionId?: string }): void {
+  warn(message: string, attrs?: Record<string, unknown>, options?: { attachments?: PulseAttachment[]; sessionId?: string }): void {
     log("warn", message, attrs, undefined, options?.attachments, options?.sessionId);
   },
 
-  error: errorOnOwl,
+  error: errorOnPulse,
 
   /**
    * Record a named funnel step. Sends an info-level event with message `step:<stepName>`.
@@ -687,7 +687,7 @@ export const Owl = {
 
   /** @deprecated Use `step()` instead. Will be removed in a future version. */
   track(stepName: string, attributes?: Record<string, string>): void {
-    Owl.step(stepName, attributes);
+    Pulse.step(stepName, attributes);
   },
 
   /**
@@ -699,10 +699,10 @@ export const Owl = {
     try {
       const ctx = ensureConfigured();
       ctx.transport.setUserProperties(userId, properties).catch((err) => {
-        if (config?.debug) console.error("Owlmetry: setUserProperties failed", err);
+        if (config?.debug) console.error("Pubky Pulse: setUserProperties failed", err);
       });
     } catch (err) {
-      if (config?.debug) console.error("Owlmetry:", err);
+      if (config?.debug) console.error("Pubky Pulse:", err);
     }
   },
 
@@ -711,8 +711,8 @@ export const Owl = {
    * numbers, and hyphens (e.g. "photo-conversion", "api-request"). Invalid characters
    * are auto-corrected with a warning logged in debug mode.
    */
-  startOperation(metric: string, attrs?: Record<string, unknown>): OwlOperation {
-    return new OwlOperation(log, normalizeSlug(metric), attrs);
+  startOperation(metric: string, attrs?: Record<string, unknown>): PulseOperation {
+    return new PulseOperation(log, normalizeSlug(metric), attrs);
   },
 
   /**
@@ -728,31 +728,31 @@ export const Owl = {
    * Return a scoped logger that tags every event with the given userId. The scope
    * can be further narrowed with `.withSession(sessionId)` if needed.
    */
-  withUser(userId: string): ScopedOwl {
-    return new ScopedOwl(userId);
+  withUser(userId: string): ScopedPulse {
+    return new ScopedPulse(userId);
   },
 
   /**
    * Return a scoped logger that tags every event with the given sessionId, overriding
    * the SDK's default per-process session ID. Use this in a request handler to link
    * backend events to a client's session — typically by propagating the client's
-   * session ID (e.g. Swift SDK `Owl.sessionId`) through a request header.
+   * session ID (e.g. Swift SDK `Pulse.sessionId`) through a request header.
    *
    * `sessionId` should be a UUID string. Non-UUID values are silently ignored
    * (the returned scope falls back to the SDK's default session ID) so untrusted
    * client input cannot crash a request handler. Enable `debug: true` on configure
    * to see warnings when invalid values are received. Chainable with `.withUser()`.
    */
-  withSession(sessionId: string): ScopedOwl {
-    return new ScopedOwl(undefined, validateSessionId(sessionId));
+  withSession(sessionId: string): ScopedPulse {
+    return new ScopedPulse(undefined, validateSessionId(sessionId));
   },
 
   /**
-   * Forward user feedback collected from your frontend to Owlmetry.
+   * Forward user feedback collected from your frontend to Pubky Pulse.
    *
    * Use this when your own frontend (web form, chat widget, support page)
    * sends feedback to your Node server and you want it captured in the
-   * Owlmetry feedback tracker.
+   * Pubky Pulse feedback tracker.
    *
    * Throws on failure — wrap calls in try/catch. Empty messages reject
    * synchronously; server-side 4xx responses surface as thrown errors with
@@ -778,7 +778,7 @@ export const Owl = {
       try {
         return await handler(...args);
       } finally {
-        await Owl.flush();
+        await Pulse.flush();
       }
     };
   },

@@ -1,15 +1,15 @@
 declare const __SDK_VERSION__: string;
 
-export const SDK_NAME = "owlmetry-node" as const;
+export const SDK_NAME = "pubky-pulse-node" as const;
 export const SDK_VERSION: string =
   typeof __SDK_VERSION__ !== "undefined" ? __SDK_VERSION__ : "0.0.0";
 
-export type OwlLogLevel = "info" | "debug" | "warn" | "error";
+export type PulseLogLevel = "info" | "debug" | "warn" | "error";
 
-export interface OwlConfiguration {
-  /** Owlmetry server endpoint URL */
+export interface PulseConfiguration {
+  /** Pubky Pulse server endpoint URL */
   endpoint: string;
-  /** Client API key for a server-platform app (must start with owl_client_) */
+  /** Client API key for a server-platform app (must start with pulse_client_) */
   apiKey: string;
   /** Service name for logging/debugging (not sent as bundle_id) */
   serviceName?: string;
@@ -28,7 +28,7 @@ export interface OwlConfiguration {
   /** Print events to console. Defaults to true. */
   consoleLogging?: boolean;
   /**
-   * Auto-capture unhandled errors as `Owl.error` events. Default: true.
+   * Auto-capture unhandled errors as `Pulse.error` events. Default: true.
    *
    * When enabled, the SDK installs `process.on('uncaughtException')` and
    * `process.on('unhandledRejection')` listeners. The handlers:
@@ -40,7 +40,7 @@ export interface OwlConfiguration {
    *  - Wrap all SDK code in try/catch and a re-entry guard, so a failure
    *    inside the SDK never compounds the original crash.
    *
-   * Pass `false` to opt out and rely on explicit `Owl.error(err)` calls only.
+   * Pass `false` to opt out and rely on explicit `Pulse.error(err)` calls only.
    */
   captureUnhandled?: boolean;
 }
@@ -49,7 +49,7 @@ export interface LogEvent {
   client_event_id: string;
   session_id: string;
   user_id?: string;
-  level: OwlLogLevel;
+  level: PulseLogLevel;
   source_module?: string;
   message: string;
   custom_attributes?: Record<string, string>;
@@ -73,7 +73,7 @@ export interface IngestResponse {
 
 /**
  * Request body accepted by `POST /v1/feedback`. Mirrors
- * `IngestFeedbackRequest` in `@owlmetry/shared`.
+ * `IngestFeedbackRequest` in `@pubky-pulse/shared`.
  */
 export interface FeedbackSubmission {
   bundle_id?: string;

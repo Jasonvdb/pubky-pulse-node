@@ -1,11 +1,11 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Owl } from "../../src/index.js";
+import { Pulse } from "../../src/index.js";
 
-const ENDPOINT = process.env.OWLMETRY_TEST_ENDPOINT || "http://127.0.0.1:4112";
-const SERVER_KEY = process.env.OWLMETRY_TEST_SERVER_KEY!;
-const AGENT_KEY = process.env.OWLMETRY_TEST_AGENT_KEY!;
+const ENDPOINT = process.env.PULSE_TEST_ENDPOINT || "http://127.0.0.1:4112";
+const SERVER_KEY = process.env.PULSE_TEST_SERVER_KEY!;
+const AGENT_KEY = process.env.PULSE_TEST_AGENT_KEY!;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -33,7 +33,7 @@ async function fetchFeedbackById(id: string): Promise<FeedbackRow | undefined> {
 
 describe("Node SDK sendFeedback integration", () => {
   before(() => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: ENDPOINT,
       apiKey: SERVER_KEY,
       appVersion: "feedback-test-1.0.0",
@@ -43,14 +43,14 @@ describe("Node SDK sendFeedback integration", () => {
   });
 
   after(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
   });
 
   it("submits feedback and returns a receipt that round-trips via the API", async () => {
     const marker = `feedback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const message = `Great app — ${marker}`;
 
-    const receipt = await Owl.sendFeedback(message, {
+    const receipt = await Pulse.sendFeedback(message, {
       name: "Jane Tester",
       email: "jane@example.com",
     });
@@ -73,7 +73,7 @@ describe("Node SDK sendFeedback integration", () => {
 
   it("rejects empty messages synchronously without hitting the server", async () => {
     await assert.rejects(
-      () => Owl.sendFeedback("   "),
+      () => Pulse.sendFeedback("   "),
       /feedback message is required/,
     );
   });
@@ -81,7 +81,7 @@ describe("Node SDK sendFeedback integration", () => {
   it("rejects messages above the 4000-char limit", async () => {
     const tooLong = "x".repeat(4001);
     await assert.rejects(
-      () => Owl.sendFeedback(tooLong),
+      () => Pulse.sendFeedback(tooLong),
       /at most 4000 characters/,
     );
   });
@@ -91,8 +91,8 @@ describe("Node SDK sendFeedback integration", () => {
     const sessionId = randomUUID();
     const message = `scoped feedback ${sessionId}`;
 
-    const owl = Owl.withUser(userId).withSession(sessionId);
-    const receipt = await owl.sendFeedback(message);
+    const pulse = Pulse.withUser(userId).withSession(sessionId);
+    const receipt = await pulse.sendFeedback(message);
 
     await new Promise((r) => setTimeout(r, 300));
 
@@ -104,7 +104,7 @@ describe("Node SDK sendFeedback integration", () => {
 
   it("surfaces server-side validation errors", async () => {
     await assert.rejects(
-      () => Owl.sendFeedback("bad email test", { email: "not-an-email" }),
+      () => Pulse.sendFeedback("bad email test", { email: "not-an-email" }),
       /submitter_email is not a valid email address/,
     );
   });

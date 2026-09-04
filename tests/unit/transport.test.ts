@@ -7,7 +7,7 @@ import type { LogEvent } from "../../src/types.js";
 function makeConfig(overrides?: Partial<ValidatedConfig>): ValidatedConfig {
   return {
     endpoint: "http://localhost:4000",
-    apiKey: "owl_client_test_1234567890123456789012345678",
+    apiKey: "pulse_client_test_1234567890123456789012345678",
     serviceName: "test",
     debug: false,
     isDev: true,
@@ -27,7 +27,7 @@ function makeEvent(overrides?: Partial<LogEvent>): LogEvent {
     level: "info",
     message: "test event",
     environment: "backend",
-    sdk_name: "owlmetry-node",
+    sdk_name: "pubky-pulse-node",
     sdk_version: "0.0.0-test",
     timestamp: new Date().toISOString(),
     ...overrides,

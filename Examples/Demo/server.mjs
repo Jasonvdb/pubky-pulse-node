@@ -1,10 +1,10 @@
 import { createServer } from "node:http";
-import { Owl } from "@owlmetry/node";
+import { Pulse } from "@synonymdev/pubky-pulse-node";
 
 const PORT = 4007;
-const API_KEY = "owl_client_svr_0000000000000000000000000000000000000000";
+const API_KEY = "pulse_client_svr_0000000000000000000000000000000000000000";
 
-Owl.configure({
+Pulse.configure({
   endpoint: "http://localhost:4000",
   apiKey: API_KEY,
   serviceName: "demo-api",
@@ -15,17 +15,17 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Owl-Session-Id",
+    "Access-Control-Allow-Headers": "Content-Type, X-Pulse-Session-Id",
   };
 }
 
-function scopedOwl(req, userId) {
-  const headerSessionId = req.headers["x-owl-session-id"];
-  let owl = userId ? Owl.withUser(userId) : null;
+function scopedPulse(req, userId) {
+  const headerSessionId = req.headers["x-pulse-session-id"];
+  let pulse = userId ? Pulse.withUser(userId) : null;
   if (headerSessionId) {
-    owl = owl ? owl.withSession(headerSessionId) : Owl.withSession(headerSessionId);
+    pulse = pulse ? pulse.withSession(headerSessionId) : Pulse.withSession(headerSessionId);
   }
-  return owl ?? Owl;
+  return pulse ?? Pulse;
 }
 
 function json(res, status, body) {
@@ -48,12 +48,12 @@ function parseBody(req) {
   });
 }
 
-const handleGreet = Owl.wrapHandler(async (req, res) => {
+const handleGreet = Pulse.wrapHandler(async (req, res) => {
   const body = await parseBody(req);
   const { name = "World", userId } = body;
 
-  const owl = scopedOwl(req, userId);
-  const op = owl.startOperation("greet", { name });
+  const pulse = scopedPulse(req, userId);
+  const op = pulse.startOperation("greet", { name });
 
   const message = `Hello, ${name}!`;
   op.complete({ name });
@@ -61,19 +61,19 @@ const handleGreet = Owl.wrapHandler(async (req, res) => {
   json(res, 200, { message });
 });
 
-const handleCheckout = Owl.wrapHandler(async (req, res) => {
+const handleCheckout = Pulse.wrapHandler(async (req, res) => {
   const body = await parseBody(req);
   const { item = "unknown", userId } = body;
 
-  const owl = scopedOwl(req, userId);
-  const op = owl.startOperation("checkout", { item });
-  owl.warn("Payment gateway timeout", { item });
+  const pulse = scopedPulse(req, userId);
+  const op = pulse.startOperation("checkout", { item });
+  pulse.warn("Payment gateway timeout", { item });
   op.fail("payment_provider_unreachable", { item });
 
   json(res, 500, { error: "Payment provider unreachable" });
 });
 
-const handleFeedback = Owl.wrapHandler(async (req, res) => {
+const handleFeedback = Pulse.wrapHandler(async (req, res) => {
   const body = await parseBody(req);
   const { message, name, email, userId } = body;
 
@@ -82,18 +82,18 @@ const handleFeedback = Owl.wrapHandler(async (req, res) => {
     return;
   }
 
-  const owl = scopedOwl(req, userId);
+  const pulse = scopedPulse(req, userId);
 
   try {
-    const receipt = await owl.sendFeedback(message, { name, email });
+    const receipt = await pulse.sendFeedback(message, { name, email });
     json(res, 201, { id: receipt.id, createdAt: receipt.createdAt });
   } catch (err) {
-    owl.warn("feedback submission failed", { reason: err.message });
+    pulse.warn("feedback submission failed", { reason: err.message });
     json(res, 400, { error: err.message });
   }
 });
 
-const handleProfile = Owl.wrapHandler(async (req, res) => {
+const handleProfile = Pulse.wrapHandler(async (req, res) => {
   const body = await parseBody(req);
   const { userId, plan, company } = body;
 
@@ -102,13 +102,13 @@ const handleProfile = Owl.wrapHandler(async (req, res) => {
     return;
   }
 
-  const owl = scopedOwl(req, userId);
+  const pulse = scopedPulse(req, userId);
   const properties = {};
   if (plan) properties.plan = plan;
   if (company) properties.company = company;
 
-  owl.setUserProperties(properties);
-  owl.info("Profile updated", { plan, company });
+  pulse.setUserProperties(properties);
+  pulse.info("Profile updated", { plan, company });
 
   json(res, 200, { updated: true, properties });
 });
@@ -163,7 +163,7 @@ server.listen(PORT, () => {
 
 process.on("SIGINT", async () => {
   console.log("\nShutting down...");
-  await Owl.shutdown();
+  await Pulse.shutdown();
   server.close();
   process.exit(0);
 });

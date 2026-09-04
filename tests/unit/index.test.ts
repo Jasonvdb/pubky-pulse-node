@@ -1,9 +1,9 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import { Owl, ScopedOwl } from "../../src/index.js";
+import { Pulse, ScopedPulse } from "../../src/index.js";
 
-describe("Owl", () => {
+describe("Pulse", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -13,7 +13,7 @@ describe("Owl", () => {
   });
 
   afterEach(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
     globalThis.fetch = originalFetch;
   });
 
@@ -56,24 +56,24 @@ describe("Owl", () => {
   }
 
   it("silently ignores logging before configure (never throws)", () => {
-    // Owl.info should not throw even when not configured
-    assert.doesNotThrow(() => Owl.info("hello"));
+    // Pulse.info should not throw even when not configured
+    assert.doesNotThrow(() => Pulse.info("hello"));
   });
 
   it("logs events at all levels after configure", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    Owl.info("info msg");
-    Owl.debug("debug msg");
-    Owl.warn("warn msg");
-    Owl.error("error msg");
-    Owl.recordMetric("test-metric", { source: "test" });
+    Pulse.info("info msg");
+    Pulse.debug("debug msg");
+    Pulse.warn("warn msg");
+    Pulse.error("error msg");
+    Pulse.recordMetric("test-metric", { source: "test" });
 
-    await Owl.flush();
+    await Pulse.flush();
 
     assert.ok(getCallCount() > 0);
 
@@ -90,17 +90,17 @@ describe("Owl", () => {
   });
 
   it("withUser creates scoped logger with user_id", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    const owl = Owl.withUser("user_123");
-    assert.ok(owl instanceof ScopedOwl);
+    const pulse = Pulse.withUser("user_123");
+    assert.ok(pulse instanceof ScopedPulse);
 
-    owl.info("user action", { key: "value" });
-    await Owl.flush();
+    pulse.info("user action", { key: "value" });
+    await Pulse.flush();
 
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].user_id, "user_123");
@@ -108,30 +108,30 @@ describe("Owl", () => {
   });
 
   it("truncates attribute values at 200 chars", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
     const longValue = "x".repeat(300);
-    Owl.info("test", { long: longValue });
-    await Owl.flush();
+    Pulse.info("test", { long: longValue });
+    await Pulse.flush();
 
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].custom_attributes.long.length, 200);
   });
 
   it("truncates message at 2000 chars", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
     const longMessage = "x".repeat(5000);
-    Owl.info(longMessage);
-    await Owl.flush();
+    Pulse.info(longMessage);
+    await Pulse.flush();
 
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].message.length, 2000);
@@ -139,14 +139,14 @@ describe("Owl", () => {
   });
 
   it("coerces non-string attribute values to string", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    Owl.info("test", { num: 42, bool: true, nil: null } as Record<string, unknown>);
-    await Owl.flush();
+    Pulse.info("test", { num: 42, bool: true, nil: null } as Record<string, unknown>);
+    await Pulse.flush();
 
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].custom_attributes.num, "42");
@@ -155,58 +155,58 @@ describe("Owl", () => {
   });
 
   it("includes appVersion when configured", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       appVersion: "1.2.3",
       flushThreshold: 100,
     });
 
-    Owl.info("test");
-    await Owl.flush();
+    Pulse.info("test");
+    await Pulse.flush();
 
     const body = parseBody(getCalls()[0].init);
     assert.equal(body.events[0].app_version, "1.2.3");
   });
 
   it("stamps every event with sdk_name and sdk_version", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    Owl.info("test");
-    await Owl.flush();
+    Pulse.info("test");
+    await Pulse.flush();
 
     const body = parseBody(getCalls()[0].init);
-    assert.equal(body.events[0].sdk_name, "owlmetry-node");
+    assert.equal(body.events[0].sdk_name, "pubky-pulse-node");
     assert.match(body.events[0].sdk_version, /^\d+\.\d+\.\d+/);
   });
 
   it("does not include bundle_id in request body", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    Owl.info("test");
-    await Owl.flush();
+    Pulse.info("test");
+    await Pulse.flush();
 
     const body = parseBody(getCalls()[0].init);
     assert.equal(body.bundle_id, undefined);
   });
 
   it("wrapHandler flushes after successful execution", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    const handler = Owl.wrapHandler(async (name: string) => {
-      Owl.info("hello", { name });
+    const handler = Pulse.wrapHandler(async (name: string) => {
+      Pulse.info("hello", { name });
       return `hi ${name}`;
     });
 
@@ -216,14 +216,14 @@ describe("Owl", () => {
   });
 
   it("wrapHandler flushes when handler throws", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
-    const handler = Owl.wrapHandler(async () => {
-      Owl.error("something broke");
+    const handler = Pulse.wrapHandler(async () => {
+      Pulse.error("something broke");
       throw new Error("boom");
     });
 
@@ -232,14 +232,14 @@ describe("Owl", () => {
   });
 
   it("wrapHandler preserves arguments", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
     let receivedArgs: unknown[] = [];
-    const handler = Owl.wrapHandler(async (a: number, b: string, c: boolean) => {
+    const handler = Pulse.wrapHandler(async (a: number, b: string, c: boolean) => {
       receivedArgs = [a, b, c];
     });
 
@@ -249,29 +249,29 @@ describe("Owl", () => {
 
   it("wrapHandler works when not configured", async () => {
     // Don't call configure — handler should still work without throwing
-    const handler = Owl.wrapHandler(async () => "ok");
+    const handler = Pulse.wrapHandler(async () => "ok");
     const result = await handler();
     assert.equal(result, "ok");
   });
 
   it("generates new session_id on each configure", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("first");
-    await Owl.flush();
+    Pulse.info("first");
+    await Pulse.flush();
 
-    await Owl.shutdown();
+    await Pulse.shutdown();
 
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("second");
-    await Owl.flush();
+    Pulse.info("second");
+    await Pulse.flush();
 
     const firstEvent = findEventByMessage("first");
     const secondEvent = findEventByMessage("second");
@@ -281,23 +281,23 @@ describe("Owl", () => {
   });
 
   it("does not emit sdk:session_started when configure() is called but no events are tracked", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    await Owl.flush();
+    await Pulse.flush();
     assert.equal(getCallCount(), 0);
   });
 
   it("emits sdk:session_started immediately before the first user event", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("hello");
-    await Owl.flush();
+    Pulse.info("hello");
+    await Pulse.flush();
 
     const body = parseBody(getCalls()[0].init);
     assert.equal(body.events.length, 2);
@@ -306,15 +306,15 @@ describe("Owl", () => {
   });
 
   it("emits sdk:session_started exactly once across multiple user events", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("first");
-    Owl.info("second");
-    Owl.info("third");
-    await Owl.flush();
+    Pulse.info("first");
+    Pulse.info("second");
+    Pulse.info("third");
+    await Pulse.flush();
 
     const body = parseBody(getCalls()[0].init);
     const starts = body.events.filter((e: { message?: string }) => e.message === "sdk:session_started");
@@ -323,23 +323,23 @@ describe("Owl", () => {
   });
 
   it("does not emit sdk:session_ended on shutdown when no user events were tracked", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    await Owl.shutdown();
+    await Pulse.shutdown();
     assert.equal(getCallCount(), 0);
   });
 
   it("emits sdk:session_ended on shutdown when user events were tracked", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("hello");
-    await Owl.shutdown();
+    Pulse.info("hello");
+    await Pulse.shutdown();
 
     assert.ok(findEventByMessage("sdk:session_started"));
     assert.ok(findEventByMessage("hello"));
@@ -347,21 +347,21 @@ describe("Owl", () => {
   });
 
   it("resets the session_started gate across configure cycles", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("first");
-    await Owl.shutdown();
+    Pulse.info("first");
+    await Pulse.shutdown();
 
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
-    Owl.info("second");
-    await Owl.flush();
+    Pulse.info("second");
+    await Pulse.flush();
 
     const starts: Array<{ session_id: string }> = [];
     for (const call of getCalls()) {
