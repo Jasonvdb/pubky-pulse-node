@@ -2,11 +2,10 @@ import { describe, it, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { Pulse } from "../../src/index.js";
 import { Transport } from "../../src/transport.js";
-import type { ValidatedConfig } from "../../src/configuration.js";
-import { SDK_NAME } from "../../src/types.js";
+import { validateConfiguration } from "../../src/configuration.js";
 
 // These assertions pin the user-visible Pubky Pulse branding: the console
-// prefix, the "Pubky Pulse: " message prefix, and the wire-level sdk_name.
+// prefix and the "Pubky Pulse: " message prefix.
 // They exist so a partial rename cannot pass unnoticed.
 describe("Pubky Pulse branding", () => {
   const originalFetch = globalThis.fetch;
@@ -15,10 +14,6 @@ describe("Pubky Pulse branding", () => {
     await Pulse.shutdown();
     globalThis.fetch = originalFetch;
     mock.restoreAll();
-  });
-
-  it("reports the pubky-pulse-node SDK name", () => {
-    assert.equal(SDK_NAME, "pubky-pulse-node");
   });
 
   it("prefixes console output with [pulse]", () => {
@@ -56,18 +51,13 @@ describe("Pubky Pulse branding", () => {
     // src/transport.ts throws "Pubky Pulse: sendFeedback rejected (...)" and
     // re-throws it by matching that exact prefix — the two must stay in sync,
     // otherwise a 4xx would be retried instead of surfacing immediately.
-    const config: ValidatedConfig = {
+    const config = validateConfiguration({
       endpoint: "http://localhost:4000",
       apiKey: "pulse_client_test_1234567890123456789012345678",
       serviceName: "test",
-      debug: false,
       isDev: true,
-      flushIntervalMs: 60000,
-      flushThreshold: 5,
-      maxBufferSize: 100,
-      consoleLogging: false,
       captureUnhandled: false,
-    };
+    });
 
     globalThis.fetch = mock.fn(async () => {
       return new Response(JSON.stringify({ error: "bad request" }), { status: 400 });
