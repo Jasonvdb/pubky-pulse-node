@@ -53,12 +53,16 @@ jobs:
         id: ver
         run: |
           latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          pkg=$(node -p "require('./package.json').version")
           if [[ -z "$latest" ]]; then
             # No v* tags yet — seed from package.json so we don't collide
             # with versions already published to npm.
-            current=$(node -p "require('./package.json').version")
+            current="$pkg"
           else
-            current=${latest#v}
+            # Take whichever is higher: the latest tag or package.json. A
+            # deliberate version reset in package.json must not be overridden
+            # by an older tag left behind from before the reset.
+            current=$(printf '%s\n%s\n' "${latest#v}" "$pkg" | sort -V | tail -n1)
           fi
           IFS='.' read -r MAJ MIN PAT <<< "$current"
 

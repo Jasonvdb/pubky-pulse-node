@@ -84,11 +84,13 @@ import { Pulse } from "./lib/pulse-server.js";
 const app = express();
 
 app.use((req, _res, next) => {
-  req.pulse = Pulse.withSession(req.get("x-pulse-session-id") ?? "");
+  const sessionId = req.get("x-pulse-session-id");
+  req.pulse = sessionId ? Pulse.withSession(sessionId) : Pulse;
   next();
 });
 
 app.post("/api/checkout", async (req, res) => {
+  // req.user is populated by your auth middleware.
   const pulse = req.pulse.withUser(req.user.id);
   const op = pulse.startOperation("checkout", { item: req.body.item });
   try {
@@ -118,14 +120,16 @@ import { Pulse } from "./lib/pulse-server.js";
 const fastify = Fastify();
 
 fastify.decorateRequest("pulse", null);
-fastify.addHook("onRequest", async (req) => {
-  req.pulse = Pulse.withSession(req.headers["x-pulse-session-id"] ?? "");
+fastify.addHook("onRequest", async (request) => {
+  const sessionId = request.headers["x-pulse-session-id"];
+  request.pulse = sessionId ? Pulse.withSession(sessionId) : Pulse;
 });
 
-fastify.post("/api/greet", async (req) => {
-  const pulse = req.pulse.withUser(req.body.userId);
-  pulse.info("Greeted", { name: req.body.name });
-  return { message: `Hello, ${req.body.name}!` };
+fastify.post("/api/greet", async (request) => {
+  // request.user comes from your auth plugin.
+  const pulse = request.pulse.withUser(request.user.id);
+  pulse.info("Greeted", { name: request.body.name });
+  return { message: `Hello, ${request.body.name}!` };
 });
 
 fastify.addHook("onClose", async () => {
@@ -137,13 +141,17 @@ fastify.addHook("onClose", async () => {
 
 ```ts
 // app/api/checkout/route.ts
+import { getSession } from "@/lib/auth";
 import { Pulse } from "@/lib/pulse-server";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const pulse = Pulse.withUser(body.userId).withSession(
-    req.headers.get("x-pulse-session-id") ?? "",
-  );
+  // The user identity comes from your session helper, never from the body.
+  const session = await getSession();
+  const sessionId = req.headers.get("x-pulse-session-id");
+  const pulse = sessionId
+    ? Pulse.withUser(session.userId).withSession(sessionId)
+    : Pulse.withUser(session.userId);
 
   const op = pulse.startOperation("checkout", { item: body.item });
   try {
@@ -166,11 +174,16 @@ export async function POST(req: Request) {
 "use server";
 
 import { headers } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { Pulse } from "@/lib/pulse-server";
 
-export async function submitFeedback(message: string, userId: string) {
-  const sessionId = (await headers()).get("x-pulse-session-id") ?? "";
-  const pulse = Pulse.withUser(userId).withSession(sessionId);
+export async function submitFeedback(message: string) {
+  // The user identity comes from your session helper, never from the caller.
+  const session = await getSession();
+  const sessionId = (await headers()).get("x-pulse-session-id");
+  const pulse = sessionId
+    ? Pulse.withUser(session.userId).withSession(sessionId)
+    : Pulse.withUser(session.userId);
 
   pulse.step("feedback-submitted");
   await pulse.sendFeedback(message);
@@ -188,7 +201,12 @@ a `finally` block, so buffered events leave before the runtime suspends.
 import { Pulse } from "./lib/pulse-server.js";
 
 export const handler = Pulse.wrapHandler(async (event) => {
-  const pulse = Pulse.withSession(event.headers?.["x-pulse-session-id"] ?? "");
+  // The caller's identity comes from the authorizer context.
+  const userId = event.requestContext.authorizer.userId;
+  const sessionId = event.headers?.["x-pulse-session-id"];
+  const pulse = sessionId
+    ? Pulse.withUser(userId).withSession(sessionId)
+    : Pulse.withUser(userId);
   pulse.info("Job started", { jobId: event.jobId });
   const result = await run(event);
   return { statusCode: 200, body: JSON.stringify(result) };
