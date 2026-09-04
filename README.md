@@ -349,6 +349,12 @@ events are queued. A `beforeExit` hook makes a best-effort final flush.
 - `await Pulse.shutdown()` — flush, remove the unhandled-error listeners and tear down.
 - `Pulse.wrapHandler(fn)` — wrap a serverless handler so it flushes in a `finally`.
 
+Failed sends are retried with exponential backoff, up to six attempts. On a `429` or `503`
+the server's `Retry-After` header (delta-seconds or an HTTP-date) is honoured whenever it
+asks for longer than the backoff would wait, capped at 60 seconds. `flush()` and
+`shutdown()` wait for a send already in flight — including one sleeping between retries —
+and then drain anything buffered meanwhile, so a clean exit never drops a batch.
+
 ## Configuration
 
 | Option | Type | Default | Description |
