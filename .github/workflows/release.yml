@@ -20,11 +20,11 @@ jobs:
     name: Wait for Test workflow
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for unit + integration
+      - name: Wait for unit tests
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.sha }}
-          check-regexp: "(Unit tests|Integration tests)"
+          check-regexp: "Unit tests"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 20
           allowed-conclusions: success
@@ -35,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -124,13 +126,14 @@ jobs:
           exit 1
 
       - name: Publish to npm
+        if: ${{ env.HAS_NPM_TOKEN == 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${{ steps.ver.outputs.version }}"
           for i in 1 2 3; do
-            if npm view "@owlmetry/node@$version" version >/dev/null 2>&1; then
-              echo "@owlmetry/node@$version already on registry, skipping"
+            if npm view "@synonymdev/pubky-pulse-node@$version" version >/dev/null 2>&1; then
+              echo "@synonymdev/pubky-pulse-node@$version already on registry, skipping"
               exit 0
             fi
             if npm publish --access public; then

@@ -1,7 +1,7 @@
 {
-  "name": "@owlmetry/node",
-  "version": "0.2.4",
-  "description": "Owlmetry Node.js Server SDK",
+  "name": "@synonymdev/pubky-pulse-node",
+  "version": "0.1.0",
+  "description": "Pubky Pulse Node.js server SDK",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -34,12 +34,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/owlmetry/owlmetry-node.git"
+    "url": "git+https://github.com/Jasonvdb/pubky-pulse-node.git"
   },
-  "homepage": "https://github.com/owlmetry/owlmetry-node",
-  "bugs": "https://github.com/owlmetry/owlmetry-node/issues",
+  "homepage": "https://github.com/Jasonvdb/pubky-pulse-node",
+  "bugs": "https://github.com/Jasonvdb/pubky-pulse-node/issues",
   "keywords": [
-    "owlmetry",
+    "pubky-pulse",
+    "pubky",
     "analytics",
     "metrics",
     "funnels",
