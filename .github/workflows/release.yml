@@ -52,18 +52,11 @@ jobs:
       - name: Compute next version
         id: ver
         run: |
-          latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          # package.json is the source of truth for the current version: every
+          # release commit writes the released version back into it, so it is
+          # never behind the newest tag on main.
           pkg=$(node -p "require('./package.json').version")
-          if [[ -z "$latest" ]]; then
-            # No v* tags yet — seed from package.json so we don't collide
-            # with versions already published to npm.
-            current="$pkg"
-          else
-            # Take whichever is higher: the latest tag or package.json. A
-            # deliberate version reset in package.json must not be overridden
-            # by an older tag left behind from before the reset.
-            current=$(printf '%s\n%s\n' "${latest#v}" "$pkg" | sort -V | tail -n1)
-          fi
+          current="$pkg"
           IFS='.' read -r MAJ MIN PAT <<< "$current"
 
           msg=$(git log -1 --pretty=%s ${{ github.sha }})
@@ -85,6 +78,12 @@ jobs:
           fi
 
           version="${MAJ}.${MIN}.${PAT}"
+          # Never tag a version that is not strictly above package.json.
+          if [[ "$version" == "$pkg" ]] || \
+             [[ "$(printf '%s\n%s\n' "$pkg" "$version" | sort -V | tail -n1)" != "$version" ]]; then
+            echo "Computed version $version is not above package.json version $pkg" >&2
+            exit 1
+          fi
           next="v${version}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"

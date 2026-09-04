@@ -162,11 +162,14 @@ export async function POST(req: Request) {
     pulse.error(err, "Checkout failed");
     op.fail("charge_failed");
     return Response.json({ error: "Checkout failed" }, { status: 500 });
-  } finally {
-    await Pulse.flush();
   }
 }
 ```
+
+On a long-running server the SDK flushes on its own interval, but on serverless hosts
+(Vercel functions, Lambda) wrap the handler with `Pulse.wrapHandler` so the buffer is
+flushed before the function is frozen — see
+[AWS Lambda / Vercel functions](#aws-lambda--vercel-functions) below.
 
 ### Next.js — server action
 
@@ -187,9 +190,12 @@ export async function submitFeedback(message: string) {
 
   pulse.step("feedback-submitted");
   await pulse.sendFeedback(message);
-  await Pulse.flush();
 }
 ```
+
+The same applies here: on serverless hosts (Vercel functions, Lambda) wrap the handler with
+`Pulse.wrapHandler` so the buffer is flushed before the function is frozen — see
+[AWS Lambda / Vercel functions](#aws-lambda--vercel-functions) below.
 
 ### AWS Lambda / Vercel functions
 
