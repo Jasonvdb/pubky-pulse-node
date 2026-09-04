@@ -1,6 +1,6 @@
-import type { OwlConfiguration } from "./types.js";
+import type { PulseConfiguration } from "./types.js";
 
-const CLIENT_KEY_PREFIX = "owl_client_";
+const CLIENT_KEY_PREFIX = "pulse_client_";
 
 export interface ValidatedConfig {
   endpoint: string;
@@ -16,9 +16,9 @@ export interface ValidatedConfig {
   captureUnhandled: boolean;
 }
 
-export function validateConfiguration(config: OwlConfiguration): ValidatedConfig {
+export function validateConfiguration(config: PulseConfiguration): ValidatedConfig {
   if (!config.endpoint || typeof config.endpoint !== "string") {
-    throw new Error("Owlmetry: endpoint is required");
+    throw new Error("Pubky Pulse: endpoint is required");
   }
 
   let endpoint = config.endpoint;
@@ -30,15 +30,15 @@ export function validateConfiguration(config: OwlConfiguration): ValidatedConfig
   try {
     new URL(endpoint);
   } catch {
-    throw new Error(`Owlmetry: invalid endpoint URL: ${endpoint}`);
+    throw new Error(`Pubky Pulse: invalid endpoint URL: ${endpoint}`);
   }
 
   if (!config.apiKey || typeof config.apiKey !== "string") {
-    throw new Error("Owlmetry: apiKey is required");
+    throw new Error("Pubky Pulse: apiKey is required");
   }
 
   if (!config.apiKey.startsWith(CLIENT_KEY_PREFIX)) {
-    throw new Error(`Owlmetry: apiKey must start with "${CLIENT_KEY_PREFIX}"`);
+    throw new Error(`Pubky Pulse: apiKey must start with "${CLIENT_KEY_PREFIX}"`);
   }
 
   return {

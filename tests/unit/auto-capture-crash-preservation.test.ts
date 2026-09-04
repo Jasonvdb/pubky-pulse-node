@@ -13,7 +13,7 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 const SDK_PATH = join(here, "..", "..", "..", "dist", "index.cjs");
 
 function writeChild(content: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "owlmetry-autocap-"));
+  const dir = mkdtempSync(join(tmpdir(), "pulse-autocap-"));
   const file = join(dir, "child.cjs");
   writeFileSync(file, content);
   return file;
@@ -24,7 +24,6 @@ function runChild(content: string): { status: number | null; stdout: string; std
   const r = spawnSync(process.execPath, [file], {
     encoding: "utf-8",
     timeout: 10000,
-    env: { ...process.env, OWLMETRY_TEST_AUTOCAP: "1" },
   });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
@@ -36,10 +35,10 @@ describe("auto-capture preserves crash semantics in child processes", () => {
     // code. If the SDK accidentally swallowed the crash (by being the only
     // listener and not calling process.exit(1)), exit code would be 0.
     const r = runChild(`
-      const { Owl } = require(${JSON.stringify(SDK_PATH)});
-      Owl.configure({
+      const { Pulse } = require(${JSON.stringify(SDK_PATH)});
+      Pulse.configure({
         endpoint: "http://127.0.0.1:1",
-        apiKey: "owl_client_test_1234567890123456789012345678",
+        apiKey: "pulse_client_test_1234567890123456789012345678",
         consoleLogging: false,
       });
       setImmediate(() => { throw new Error("boom"); });
@@ -51,10 +50,10 @@ describe("auto-capture preserves crash semantics in child processes", () => {
     // The user attaches their own handler that calls process.exit(2).
     // The SDK must observe the error but NOT override the user's exit code.
     const r = runChild(`
-      const { Owl } = require(${JSON.stringify(SDK_PATH)});
-      Owl.configure({
+      const { Pulse } = require(${JSON.stringify(SDK_PATH)});
+      Pulse.configure({
         endpoint: "http://127.0.0.1:1",
-        apiKey: "owl_client_test_1234567890123456789012345678",
+        apiKey: "pulse_client_test_1234567890123456789012345678",
         consoleLogging: false,
       });
       process.on("uncaughtException", () => process.exit(2));
@@ -67,10 +66,10 @@ describe("auto-capture preserves crash semantics in child processes", () => {
     // No SDK listeners → Node default crash. Exit non-zero, just like
     // running without the SDK.
     const r = runChild(`
-      const { Owl } = require(${JSON.stringify(SDK_PATH)});
-      Owl.configure({
+      const { Pulse } = require(${JSON.stringify(SDK_PATH)});
+      Pulse.configure({
         endpoint: "http://127.0.0.1:1",
-        apiKey: "owl_client_test_1234567890123456789012345678",
+        apiKey: "pulse_client_test_1234567890123456789012345678",
         consoleLogging: false,
         captureUnhandled: false,
       });
@@ -84,10 +83,10 @@ describe("auto-capture preserves crash semantics in child processes", () => {
     // a process crash even with our handler attached. We achieve this by
     // re-throwing from our rejectionHandler when listenerCount <= 1.
     const r = runChild(`
-      const { Owl } = require(${JSON.stringify(SDK_PATH)});
-      Owl.configure({
+      const { Pulse } = require(${JSON.stringify(SDK_PATH)});
+      Pulse.configure({
         endpoint: "http://127.0.0.1:1",
-        apiKey: "owl_client_test_1234567890123456789012345678",
+        apiKey: "pulse_client_test_1234567890123456789012345678",
         consoleLogging: false,
       });
       Promise.reject(new Error("unhandled"));

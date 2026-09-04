@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { Owl } from "../../src/index.js";
+import { Pulse } from "../../src/index.js";
 
-describe("Owl auto-capture handler registration", () => {
+describe("Pulse auto-capture handler registration", () => {
   const originalFetch = globalThis.fetch;
   let baselineUncaught = 0;
   let baselineRejection = 0;
@@ -16,7 +16,7 @@ describe("Owl auto-capture handler registration", () => {
   });
 
   afterEach(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
     globalThis.fetch = originalFetch;
     // Sanity: shutdown must restore the baseline.
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught);
@@ -24,18 +24,18 @@ describe("Owl auto-capture handler registration", () => {
   });
 
   it("default-on registers both listeners on configure", () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
     });
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught + 1);
     assert.equal(process.listenerCount("unhandledRejection"), baselineRejection + 1);
   });
 
   it("captureUnhandled:false does NOT register listeners", () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       captureUnhandled: false,
     });
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught);
@@ -43,40 +43,40 @@ describe("Owl auto-capture handler registration", () => {
   });
 
   it("re-configuring with different captureUnhandled flips registration", () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       captureUnhandled: true,
     });
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught + 1);
 
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       captureUnhandled: false,
     });
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught);
   });
 
   it("calling configure twice with default-on does not double-register", () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
     });
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
     });
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught + 1);
     assert.equal(process.listenerCount("unhandledRejection"), baselineRejection + 1);
   });
 
   it("shutdown removes both listeners cleanly", async () => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
     });
-    await Owl.shutdown();
+    await Pulse.shutdown();
     assert.equal(process.listenerCount("uncaughtException"), baselineUncaught);
     assert.equal(process.listenerCount("unhandledRejection"), baselineRejection);
   });
@@ -85,9 +85,9 @@ describe("Owl auto-capture handler registration", () => {
     // We cannot trigger a real uncaughtException from inside a test (Node's
     // test runner has its own handler), but we can verify the listener does
     // the right thing by extracting it from `process` and calling it.
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
     });
 
@@ -103,7 +103,7 @@ describe("Owl auto-capture handler registration", () => {
     ourListener(new TypeError("simulated uncaught"));
     // Wait a tick so the async flush + enqueue completes.
     await new Promise((r) => setTimeout(r, 50));
-    await Owl.flush();
+    await Pulse.flush();
     const after = (globalThis.fetch as unknown as { mock: { callCount(): number } }).mock.callCount();
     assert.ok(after > before, "expected an event to be sent after the simulated crash");
   });

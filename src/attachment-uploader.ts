@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { ValidatedConfig } from "./configuration.js";
 
-export interface OwlAttachment {
+export interface PulseAttachment {
   /** Absolute path to a file on disk. Mutually exclusive with `buffer`. */
   path?: string;
   /** In-memory bytes. Mutually exclusive with `path`. */
@@ -17,7 +17,7 @@ interface PendingUpload {
   clientEventId: string;
   userId?: string;
   isDev: boolean;
-  attachment: OwlAttachment;
+  attachment: PulseAttachment;
 }
 
 interface ReserveResponse {
@@ -60,7 +60,7 @@ export class AttachmentUploader {
 
   constructor(private readonly cfg: ValidatedConfig) {}
 
-  enqueue(clientEventId: string, userId: string | undefined, isDev: boolean, attachments: OwlAttachment[]): void {
+  enqueue(clientEventId: string, userId: string | undefined, isDev: boolean, attachments: PulseAttachment[]): void {
     for (const attachment of attachments) {
       this.pending.push({ clientEventId, userId, isDev, attachment });
     }
@@ -85,7 +85,7 @@ export class AttachmentUploader {
           await this.uploadOne(next);
         } catch (err) {
           if (this.cfg.debug) {
-            console.error("Owlmetry: attachment upload failed", err);
+            console.error("Pubky Pulse: attachment upload failed", err);
           }
         }
       }
@@ -113,18 +113,18 @@ export class AttachmentUploader {
       name = item.attachment.name ?? inferredName;
       contentType = item.attachment.contentType ?? inferContentType(name);
     } else {
-      if (this.cfg.debug) console.error("Owlmetry: attachment missing both path and buffer");
+      if (this.cfg.debug) console.error("Pubky Pulse: attachment missing both path and buffer");
       return;
     }
 
     if (bytes.length === 0) {
-      if (this.cfg.debug) console.error(`Owlmetry: skipping empty attachment "${name}"`);
+      if (this.cfg.debug) console.error(`Pubky Pulse: skipping empty attachment "${name}"`);
       return;
     }
     if (bytes.length > SDK_HARD_CAP_BYTES) {
       if (this.cfg.debug) {
         console.error(
-          `Owlmetry: attachment "${name}" is ${bytes.length} bytes, exceeds SDK hard cap ${SDK_HARD_CAP_BYTES}. Skipping.`
+          `Pubky Pulse: attachment "${name}" is ${bytes.length} bytes, exceeds SDK hard cap ${SDK_HARD_CAP_BYTES}. Skipping.`
         );
       }
       return;
@@ -176,13 +176,13 @@ export class AttachmentUploader {
       if (!res.ok) {
         if (this.cfg.debug) {
           const body = await res.text().catch(() => "");
-          console.error(`Owlmetry: attachment reserve for "${args.name}" rejected (${res.status}): ${body}`);
+          console.error(`Pubky Pulse: attachment reserve for "${args.name}" rejected (${res.status}): ${body}`);
         }
         return null;
       }
       return (await res.json()) as ReserveResponse;
     } catch (err) {
-      if (this.cfg.debug) console.error("Owlmetry: attachment reserve network error", err);
+      if (this.cfg.debug) console.error("Pubky Pulse: attachment reserve network error", err);
       return null;
     }
   }
@@ -202,15 +202,15 @@ export class AttachmentUploader {
         if (res.status >= 400 && res.status < 500) {
           if (this.cfg.debug) {
             const body = await res.text().catch(() => "");
-            console.error(`Owlmetry: attachment upload "${name}" rejected (${res.status}): ${body}`);
+            console.error(`Pubky Pulse: attachment upload "${name}" rejected (${res.status}): ${body}`);
           }
           return;
         }
         if (this.cfg.debug) {
-          console.error(`Owlmetry: attachment upload "${name}" returned ${res.status}, attempt ${attempt + 1}`);
+          console.error(`Pubky Pulse: attachment upload "${name}" returned ${res.status}, attempt ${attempt + 1}`);
         }
       } catch (err) {
-        if (this.cfg.debug) console.error("Owlmetry: attachment upload network error", err);
+        if (this.cfg.debug) console.error("Pubky Pulse: attachment upload network error", err);
       }
     }
   }

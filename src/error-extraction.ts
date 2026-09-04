@@ -1,5 +1,5 @@
 /**
- * Extract structured fields from a value passed to `Owl.error(error)` for
+ * Extract structured fields from a value passed to `Pulse.error(error)` for
  * delivery as `_error_*` reserved custom attributes. The server reads these
  * to drive issue fingerprinting (`_error_type` is the discriminator) and
  * dashboard rendering.

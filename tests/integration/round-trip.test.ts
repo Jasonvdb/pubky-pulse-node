@@ -1,15 +1,15 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Owl } from "../../src/index.js";
+import { Pulse } from "../../src/index.js";
 
-const ENDPOINT = process.env.OWLMETRY_TEST_ENDPOINT || "http://127.0.0.1:4112";
-const SERVER_KEY = process.env.OWLMETRY_TEST_SERVER_KEY!;
-const AGENT_KEY = process.env.OWLMETRY_TEST_AGENT_KEY!;
+const ENDPOINT = process.env.PULSE_TEST_ENDPOINT || "http://127.0.0.1:4112";
+const SERVER_KEY = process.env.PULSE_TEST_SERVER_KEY!;
+const AGENT_KEY = process.env.PULSE_TEST_AGENT_KEY!;
 
 describe("Node SDK integration", () => {
   before(() => {
-    Owl.configure({
+    Pulse.configure({
       endpoint: ENDPOINT,
       apiKey: SERVER_KEY,
       appVersion: "1.0.0-test",
@@ -19,14 +19,14 @@ describe("Node SDK integration", () => {
   });
 
   after(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
   });
 
   it("sends events and queries them back", async () => {
     const uniqueMsg = `integration-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    Owl.info(uniqueMsg, { test: "true" });
-    await Owl.flush();
+    Pulse.info(uniqueMsg, { test: "true" });
+    await Pulse.flush();
 
     // Wait briefly for server to process
     await new Promise((r) => setTimeout(r, 500));
@@ -47,9 +47,9 @@ describe("Node SDK integration", () => {
 
   it("sends events with user_id via withUser", async () => {
     const uniqueMsg = `user-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const owl = Owl.withUser("integration-user-42");
-    owl.error(uniqueMsg);
-    await Owl.flush();
+    const pulse = Pulse.withUser("integration-user-42");
+    pulse.error(uniqueMsg);
+    await Pulse.flush();
 
     await new Promise((r) => setTimeout(r, 500));
 
@@ -69,13 +69,13 @@ describe("Node SDK integration", () => {
     const userId = `props-test-${Date.now()}`;
 
     // Send an event to ensure the user exists
-    const owl = Owl.withUser(userId);
-    owl.info("properties test");
-    await Owl.flush();
+    const pulse = Pulse.withUser(userId);
+    pulse.info("properties test");
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     // Set properties
-    owl.setUserProperties({ plan: "premium", org: "acme" });
+    pulse.setUserProperties({ plan: "premium", org: "acme" });
     await new Promise((r) => setTimeout(r, 1000));
 
     // Query app-users to verify properties
@@ -94,17 +94,17 @@ describe("Node SDK integration", () => {
   it("merges user properties without overwriting", async () => {
     const userId = `merge-test-${Date.now()}`;
 
-    const owl = Owl.withUser(userId);
-    owl.info("merge test");
-    await Owl.flush();
+    const pulse = Pulse.withUser(userId);
+    pulse.info("merge test");
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     // Set initial properties
-    owl.setUserProperties({ plan: "free", org: "acme" });
+    pulse.setUserProperties({ plan: "free", org: "acme" });
     await new Promise((r) => setTimeout(r, 1000));
 
     // Update one, add another
-    owl.setUserProperties({ plan: "premium", role: "admin" });
+    pulse.setUserProperties({ plan: "premium", role: "admin" });
     await new Promise((r) => setTimeout(r, 1000));
 
     const res = await fetch(`${ENDPOINT}/v1/app-users?search=${userId}&data_mode=all`, {
@@ -123,9 +123,9 @@ describe("Node SDK integration", () => {
     const clientSessionId = randomUUID();
     const uniqueMsg = `session-scope-${clientSessionId}`;
 
-    const owl = Owl.withSession(clientSessionId).withUser("session-scope-user");
-    owl.info(uniqueMsg, { scoped: "true" });
-    await Owl.flush();
+    const pulse = Pulse.withSession(clientSessionId).withUser("session-scope-user");
+    pulse.info(uniqueMsg, { scoped: "true" });
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     const res = await fetch(`${ENDPOINT}/v1/events?session_id=${clientSessionId}&limit=10&data_mode=all`, {
@@ -144,8 +144,8 @@ describe("Node SDK integration", () => {
     const clientSessionId = randomUUID();
     const uniqueMsg = `session-override-${clientSessionId}`;
 
-    Owl.info(uniqueMsg, { overridden: "true" }, { sessionId: clientSessionId });
-    await Owl.flush();
+    Pulse.info(uniqueMsg, { overridden: "true" }, { sessionId: clientSessionId });
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     const res = await fetch(`${ENDPOINT}/v1/events?session_id=${clientSessionId}&limit=10&data_mode=all`, {
@@ -163,9 +163,9 @@ describe("Node SDK integration", () => {
     const uniqueMsg = `invalid-session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     // Non-UUID input must not throw — the scope still works, just with the default session
-    const owl = Owl.withSession("not-a-uuid").withUser("invalid-session-user");
-    owl.info(uniqueMsg);
-    await Owl.flush();
+    const pulse = Pulse.withSession("not-a-uuid").withUser("invalid-session-user");
+    pulse.info(uniqueMsg);
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     const res = await fetch(`${ENDPOINT}/v1/events?user_id=invalid-session-user&limit=20&data_mode=all`, {
@@ -184,8 +184,8 @@ describe("Node SDK integration", () => {
     const uniqueMsg = `invalid-option-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     // Must not throw — the event still gets sent with the default session ID
-    Owl.info(uniqueMsg, { path: "/api/thing" }, { sessionId: "also-not-a-uuid" });
-    await Owl.flush();
+    Pulse.info(uniqueMsg, { path: "/api/thing" }, { sessionId: "also-not-a-uuid" });
+    await Pulse.flush();
     await new Promise((r) => setTimeout(r, 500));
 
     const res = await fetch(`${ENDPOINT}/v1/events?limit=50&data_mode=all`, {
@@ -203,11 +203,11 @@ describe("Node SDK integration", () => {
     const uniqueMsg = `dedup-test-${Date.now()}`;
 
     // Send same event twice
-    Owl.info(uniqueMsg);
-    await Owl.flush();
+    Pulse.info(uniqueMsg);
+    await Pulse.flush();
 
-    Owl.info(uniqueMsg);
-    await Owl.flush();
+    Pulse.info(uniqueMsg);
+    await Pulse.flush();
 
     await new Promise((r) => setTimeout(r, 500));
 

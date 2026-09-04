@@ -1,20 +1,20 @@
 import { randomUUID } from "node:crypto";
-import type { OwlAttachment } from "./attachment-uploader.js";
+import type { PulseAttachment } from "./attachment-uploader.js";
 
 export type LogFn = (
   level: "info" | "error",
   message: string,
   attrs?: Record<string, unknown>,
   userId?: string,
-  attachments?: OwlAttachment[],
+  attachments?: PulseAttachment[],
   sessionId?: string,
 ) => void;
 
 /**
  * Tracks a metric operation lifecycle (start → complete/fail/cancel).
- * Created by `Owl.startOperation()` or `ScopedOwl.startOperation()`.
+ * Created by `Pulse.startOperation()` or `ScopedPulse.startOperation()`.
  */
-export class OwlOperation {
+export class PulseOperation {
   readonly trackingId: string;
   private metric: string;
   private startTime: number;

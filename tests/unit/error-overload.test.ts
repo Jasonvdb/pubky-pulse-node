@@ -1,9 +1,9 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import { Owl } from "../../src/index.js";
+import { Pulse } from "../../src/index.js";
 
-describe("Owl.error overload accepting Error values", () => {
+describe("Pulse.error overload accepting Error values", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -13,7 +13,7 @@ describe("Owl.error overload accepting Error values", () => {
   });
 
   afterEach(async () => {
-    await Owl.shutdown();
+    await Pulse.shutdown();
     globalThis.fetch = originalFetch;
   });
 
@@ -40,9 +40,9 @@ describe("Owl.error overload accepting Error values", () => {
   }
 
   function configure(): void {
-    Owl.configure({
+    Pulse.configure({
       endpoint: "http://localhost:4000",
-      apiKey: "owl_client_test_1234567890123456789012345678",
+      apiKey: "pulse_client_test_1234567890123456789012345678",
       flushThreshold: 100,
       captureUnhandled: false, // off in tests so listeners don't outlive the test
     });
@@ -50,8 +50,8 @@ describe("Owl.error overload accepting Error values", () => {
 
   it("string-message form keeps existing behavior", async () => {
     configure();
-    Owl.error("plain string");
-    await Owl.flush();
+    Pulse.error("plain string");
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events.length, 1);
     assert.equal(events[0].message, "plain string");
@@ -60,8 +60,8 @@ describe("Owl.error overload accepting Error values", () => {
 
   it("Error-value form extracts type/stack into custom_attributes", async () => {
     configure();
-    Owl.error(new TypeError("oops"));
-    await Owl.flush();
+    Pulse.error(new TypeError("oops"));
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events.length, 1);
     assert.equal(events[0].message, "oops");
@@ -71,8 +71,8 @@ describe("Owl.error overload accepting Error values", () => {
 
   it("Error-value form with caller message uses caller message", async () => {
     configure();
-    Owl.error(new Error("internal"), "while saving order");
-    await Owl.flush();
+    Pulse.error(new Error("internal"), "while saving order");
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].message, "while saving order");
     // _error_stack still carries the original error context
@@ -81,8 +81,8 @@ describe("Owl.error overload accepting Error values", () => {
 
   it("Error-value form merges caller-provided attrs (caller keys preserved)", async () => {
     configure();
-    Owl.error(new Error("boom"), undefined, { request_id: "req-1" });
-    await Owl.flush();
+    Pulse.error(new Error("boom"), undefined, { request_id: "req-1" });
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].custom_attributes.request_id, "req-1");
     assert.equal(events[0].custom_attributes._error_type, "Error");
@@ -92,18 +92,18 @@ describe("Owl.error overload accepting Error values", () => {
     configure();
     const err = new Error("boom");
     err.stack = "x".repeat(8000);
-    Owl.error(err);
-    await Owl.flush();
+    Pulse.error(err);
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     assert.equal(events[0].custom_attributes._error_stack.length, 8000);
   });
 
   it("Error-value form handles thrown non-Error values", async () => {
     configure();
-    Owl.error("string-thrown");
-    Owl.error(42 as unknown as Error);
-    Owl.error(null);
-    await Owl.flush();
+    Pulse.error("string-thrown");
+    Pulse.error(42 as unknown as Error);
+    Pulse.error(null);
+    await Pulse.flush();
     const events = userEvents(parseBody(getCalls()[0].init));
     // First event: matches the string overload (message is the string)
     assert.equal(events[0].message, "string-thrown");
