@@ -17,6 +17,7 @@ import { extractErrorAttributes } from "./error-extraction.js";
 export type { PulseConfiguration, PulseLogLevel, LogEvent } from "./types.js";
 export type { PulseAttachment } from "./attachment-uploader.js";
 export { PulseOperation } from "./operation.js";
+export { DEFAULT_ENDPOINT } from "./configuration.js";
 
 const MAX_FEEDBACK_MESSAGE_LENGTH = 4000;
 
