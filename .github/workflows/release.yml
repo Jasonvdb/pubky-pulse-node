@@ -119,32 +119,28 @@ jobs:
           fi
           next="v${version}"
 
-          # Rerun safety: if a previous run pushed main but then failed (tag
-          # push, release creation or npm publish), main is ahead of the event
-          # SHA while the tag may or may not exist. A rerun checks out the same
-          # SHA and computes the same version, so the tag being there is the
-          # signal that this release already happened — locally (the checkout
-          # fetches tags) or on the remote.
+          # Rerun safety: if a previous run pushed main but then failed (release
+          # creation or npm publish), main is ahead of the event SHA and the tag
+          # is already there. A rerun checks out the same SHA and computes the
+          # same version, so the tag is the signal that this release already
+          # happened — locally (the checkout fetches tags) or on the remote.
           #
-          # The tag EXISTING is not enough on its own, though. Any tag of that
-          # name matches: one left over from earlier history, restored from a
-          # backup, or created by hand. This repository is the cautionary
-          # example — it carried bot-made v0.1.1 and v0.1.2 tags before 74d80b5
-          # reset package.json to 0.1.0. On such a tag the workflow wedges
-          # silently and permanently: "Commit, tag, push" is skipped so the bump
-          # never lands on main, main's package.json stays at the old version,
-          # the next push recomputes the same version, finds the same tag and
-          # skips again — while the publish step's duplicate-version branch
-          # reports success, so no run ever goes red. Versions simply stop
-          # advancing and nothing says so.
+          # The tag EXISTING is not enough on its own. Any tag of that name
+          # matches: one left over from earlier history, restored from a backup,
+          # or created by hand. On such a tag the workflow wedges silently and
+          # permanently: "Commit, tag, push" is skipped so the bump never lands
+          # on main, main's package.json stays at the old version, the next push
+          # recomputes the same version, finds the same tag and skips again —
+          # while the publish step's duplicate-version branch reports success,
+          # so no run ever goes red. Versions simply stop advancing and nothing
+          # says so.
           #
           # So only count the tag when it is THIS release's tag: the commit it
           # points at must carry the computed version in its package.json, which
-          # is exactly what the bump commit a genuine rerun is looking at does.
-          # Any unrelated tag of that name leaves the guard false, and the
-          # atomic push below then fails loudly because the tag already exists —
-          # a visible error a human can act on. Do not simplify this back to
-          # bare tag existence.
+          # is what the bump commit a genuine rerun looks at does. Any unrelated
+          # tag leaves the guard false, and the atomic push below then fails
+          # loudly because the tag already exists — a visible error a human can
+          # act on. Do not simplify this back to bare tag existence.
           already_released=false
           tag_ref=""
           if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then
@@ -172,7 +168,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "already_released=$already_released" >> "$GITHUB_OUTPUT"
-          echo "Next version: $next (from '$msg'), tag already exists: $already_released"
+          echo "Next version: $next (from '$msg'), already released: $already_released"
 
       - name: Bump package.json
         run: npm version "${{ steps.ver.outputs.version }}" --no-git-tag-version --allow-same-version
