@@ -44,4 +44,4 @@ Pass `X-Pulse-Session-Id` on any POST to correlate the resulting events with an 
 
 ## iOS demo integration
 
-Start the API server, then this demo, then the iOS demo from [`pubky-pulse-swift/Examples/Demo/`](https://github.com/pubky/pubky-pulse-swift/tree/main/Examples/Demo). The iOS app's "Backend Demo" buttons call `http://localhost:4007/api/greet` and `/api/checkout` — the full end-to-end flow is walked through in [`pubky-pulse/demos/DEMO_TEST_GUIDE.md`](https://github.com/Jasonvdb/pubky-pulse/blob/main/demos/DEMO_TEST_GUIDE.md).
+Start the API server, then this demo, then the iOS demo from [`pubky-pulse-swift/Examples/Demo/`](https://github.com/Jasonvdb/pubky-pulse-swift/tree/main/Examples/Demo). The iOS app's "Backend Demo" buttons call `http://localhost:4007/api/greet` and `/api/checkout` — the full end-to-end flow is walked through in [`pubky-pulse/demos/DEMO_TEST_GUIDE.md`](https://github.com/Jasonvdb/pubky-pulse/blob/main/demos/DEMO_TEST_GUIDE.md).
