@@ -34,7 +34,6 @@ Configure once at process start, then log from anywhere:
 
 ```js
 Pulse.configure({
-  endpoint: "https://api.pulse.pubky.org",
   apiKey: "pulse_client_...",
   serviceName: "api",
   appVersion: "1.4.2",
@@ -55,6 +54,11 @@ Pulse.step("signup-started");
 // Scope events to a user and a browser/app session
 Pulse.withUser("user_123").withSession(sessionIdFromHeader).info("Cart updated");
 ```
+
+Leaving `endpoint` out sends events to Pubky's hosted instance at
+`https://ingest.pubkypulse.com`, and the fallback is silent, so a self-hosted deployment
+that omits it ships its data to Pubky's instance instead of its own. The optional
+`endpoint` needs 0.2.0 or newer; on 0.1.1 and earlier it is always required.
 
 ## Use it in your environment
 
@@ -359,7 +363,7 @@ and then drain anything buffered meanwhile, so a clean exit never drops a batch.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `endpoint` | `string` | — (required) | Pubky Pulse server URL; a trailing slash is stripped |
+| `endpoint` | `string` | `https://ingest.pubkypulse.com` | Pubky's hosted ingest host; a trailing slash is stripped, and self-hosters must set their own explicitly |
 | `apiKey` | `string` | — (required) | Client key for a server-platform app; must start with `pulse_client_` |
 | `serviceName` | `string` | `"unknown"` | Service name used for logging/debugging |
 | `appVersion` | `string` | — | Application version reported with each event |
@@ -404,7 +408,7 @@ npm run test:integration
 
 ## Links
 
-- [Docs](https://pulse.pubky.org/docs/sdks/node)
+- [Docs](https://pubkypulse.com/docs/sdks/node)
 - [Main repo](https://github.com/Jasonvdb/pubky-pulse) — server, dashboard, CLI
 - [Browser SDK](https://github.com/Jasonvdb/pubky-pulse-web)
 
