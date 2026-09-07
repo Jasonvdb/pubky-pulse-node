@@ -122,12 +122,51 @@ jobs:
           # Rerun safety: if a previous run pushed main but then failed (tag
           # push, release creation or npm publish), main is ahead of the event
           # SHA while the tag may or may not exist. A rerun checks out the same
-          # SHA and computes the same version, so record whether the tag is
-          # already there — locally (the checkout fetches tags) or on the remote.
+          # SHA and computes the same version, so the tag being there is the
+          # signal that this release already happened — locally (the checkout
+          # fetches tags) or on the remote.
+          #
+          # The tag EXISTING is not enough on its own, though. Any tag of that
+          # name matches: one left over from earlier history, restored from a
+          # backup, or created by hand. This repository is the cautionary
+          # example — it carried bot-made v0.1.1 and v0.1.2 tags before 74d80b5
+          # reset package.json to 0.1.0. On such a tag the workflow wedges
+          # silently and permanently: "Commit, tag, push" is skipped so the bump
+          # never lands on main, main's package.json stays at the old version,
+          # the next push recomputes the same version, finds the same tag and
+          # skips again — while the publish step's duplicate-version branch
+          # reports success, so no run ever goes red. Versions simply stop
+          # advancing and nothing says so.
+          #
+          # So only count the tag when it is THIS release's tag: the commit it
+          # points at must carry the computed version in its package.json, which
+          # is exactly what the bump commit a genuine rerun is looking at does.
+          # Any unrelated tag of that name leaves the guard false, and the
+          # atomic push below then fails loudly because the tag already exists —
+          # a visible error a human can act on. Do not simplify this back to
+          # bare tag existence.
           already_released=false
-          if git rev-parse -q --verify "refs/tags/$next" >/dev/null \
-             || [[ -n "$(git ls-remote --tags origin "refs/tags/$next")" ]]; then
-            already_released=true
+          tag_ref=""
+          if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then
+            tag_ref="refs/tags/$next"
+          elif [[ -n "$(git ls-remote --tags origin "refs/tags/$next")" ]]; then
+            # Created after this job's checkout: fetch it so it can be inspected
+            # the same way as a tag that was already local.
+            git fetch --no-tags origin "refs/tags/$next:refs/tags/$next"
+            tag_ref="refs/tags/$next"
+          fi
+
+          if [[ -n "$tag_ref" ]]; then
+            # A tagged commit with no package.json, or an unparseable one, reads
+            # as empty here rather than failing the step.
+            tagged_pkg=$(git show "$tag_ref^{commit}:package.json" 2>/dev/null || true)
+            tagged_version=$(TAGGED_PKG="$tagged_pkg" node -p \
+              "(() => { try { return JSON.parse(process.env.TAGGED_PKG).version || '' } catch { return '' } })()")
+            if [[ "$tagged_version" == "$version" ]]; then
+              already_released=true
+            else
+              echo "::warning::Tag $next already exists but the package.json at that tag says version '${tagged_version:-<none>}', not $version, so it is not this release. Not skipping the release steps; the tag push will fail loudly if that tag is in the way."
+            fi
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
