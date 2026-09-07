@@ -2,6 +2,14 @@ import type { PulseConfiguration } from "./types.js";
 
 const CLIENT_KEY_PREFIX = "pulse_client_";
 
+/**
+ * Pubky's own hosted ingest host, used when the caller omits `endpoint`.
+ *
+ * The fallback is silent, so self-hosters must pass their own ingest host
+ * explicitly — nothing warns them that their data went to Pubky instead.
+ */
+export const DEFAULT_ENDPOINT = "https://ingest.pubkypulse.com";
+
 export interface ValidatedConfig {
   endpoint: string;
   apiKey: string;
@@ -17,11 +25,17 @@ export interface ValidatedConfig {
 }
 
 export function validateConfiguration(config: PulseConfiguration): ValidatedConfig {
-  if (!config.endpoint || typeof config.endpoint !== "string") {
+  // Only an absent `endpoint` falls back to the default. Any other unusable
+  // value — "", null, a number — is still an error: an explicitly supplied
+  // empty value is almost always an environment variable that failed to load,
+  // and silently redirecting that traffic to Pubky's hosted instance would send
+  // a self-hoster's data to the wrong company with nothing to tell them.
+  const supplied = config.endpoint === undefined ? DEFAULT_ENDPOINT : config.endpoint;
+  if (!supplied || typeof supplied !== "string") {
     throw new Error("Pubky Pulse: endpoint is required");
   }
 
-  let endpoint = config.endpoint;
+  let endpoint = supplied;
   // Strip trailing slash
   if (endpoint.endsWith("/")) {
     endpoint = endpoint.slice(0, -1);

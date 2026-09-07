@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { validateConfiguration } from "../../src/configuration.js";
+import { DEFAULT_ENDPOINT, validateConfiguration } from "../../src/configuration.js";
 
 describe("validateConfiguration", () => {
   const validConfig = {
@@ -23,11 +23,39 @@ describe("validateConfiguration", () => {
     assert.equal(result.endpoint, "http://localhost:4000");
   });
 
-  it("rejects empty endpoint", () => {
+  it("rejects an explicitly empty endpoint", () => {
     assert.throws(
       () => validateConfiguration({ ...validConfig, endpoint: "" }),
       /endpoint is required/,
     );
+    assert.throws(
+      () => validateConfiguration({ ...validConfig, endpoint: null as unknown as string }),
+      /endpoint is required/,
+    );
+    assert.throws(
+      () => validateConfiguration({ ...validConfig, endpoint: 42 as unknown as string }),
+      /endpoint is required/,
+    );
+  });
+
+  it("falls back to the default endpoint when endpoint is omitted", () => {
+    const { endpoint: _omitted, ...withoutEndpoint } = validConfig;
+    const result = validateConfiguration(withoutEndpoint);
+    assert.equal(result.endpoint, "https://ingest.pubkypulse.com");
+  });
+
+  it("falls back to the default endpoint when endpoint is explicitly undefined", () => {
+    const result = validateConfiguration({ ...validConfig, endpoint: undefined });
+    assert.equal(result.endpoint, "https://ingest.pubkypulse.com");
+  });
+
+  it("prefers a supplied endpoint over the default", () => {
+    const result = validateConfiguration({ ...validConfig, endpoint: "https://pulse.example.com" });
+    assert.equal(result.endpoint, "https://pulse.example.com");
+  });
+
+  it("exposes the default endpoint constant", () => {
+    assert.equal(DEFAULT_ENDPOINT, "https://ingest.pubkypulse.com");
   });
 
   it("rejects invalid endpoint URL", () => {

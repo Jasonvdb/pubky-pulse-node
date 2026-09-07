@@ -7,8 +7,12 @@ export const SDK_VERSION: string =
 export type PulseLogLevel = "info" | "debug" | "warn" | "error";
 
 export interface PulseConfiguration {
-  /** Pubky Pulse server endpoint URL */
-  endpoint: string;
+  /**
+   * Pubky Pulse server endpoint URL. Optional — omitting it uses Pubky's hosted
+   * ingest host, `https://ingest.pubkypulse.com`. Self-hosters MUST set it,
+   * because the fallback is silent.
+   */
+  endpoint?: string;
   /** Client API key for a server-platform app (must start with pulse_client_) */
   apiKey: string;
   /** Service name for logging/debugging (not sent as bundle_id) */
