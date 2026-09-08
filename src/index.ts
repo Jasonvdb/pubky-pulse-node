@@ -37,9 +37,9 @@ export interface SendFeedbackOptions {
    */
   sessionId?: string;
   /**
-   * Bundle ID — only needed when forwarding feedback on behalf of a mobile
-   * frontend whose Pubky Pulse app has a bundle_id set. Backend apps have no
-   * bundle_id so this can be omitted.
+   * Optional legacy bundle metadata, retained for compatibility. The client
+   * key determines the app. Web/backend app keys skip identifier validation;
+   * Apple/Android app keys require a supplied identifier to match the registered one.
    */
   bundleId?: string;
   /** Override environment (default: "backend"). Validated server-side. */
