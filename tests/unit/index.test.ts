@@ -198,6 +198,30 @@ describe("Pulse", () => {
     assert.equal(body.bundle_id, undefined);
   });
 
+  for (const bundleId of [undefined, "com.example.legacy"]) {
+    it(`sends feedback ${bundleId ? "with optional legacy bundle metadata" : "without bundle metadata"}`, async () => {
+      globalThis.fetch = mock.fn(async () => new Response(JSON.stringify({
+        id: "feedback-id", created_at: "2026-09-08T00:00:00Z",
+      }), { status: 201 })) as unknown as typeof fetch;
+      Pulse.configure({
+        endpoint: "http://localhost:4000",
+        apiKey: "pulse_client_test_1234567890123456789012345678",
+        flushThreshold: 100,
+      });
+
+      await Pulse.sendFeedback("Feedback", bundleId ? { bundleId } : {});
+
+      const calls = getCalls().filter((call) => call.url.endsWith("/v1/feedback"));
+      assert.equal(calls.length, 1);
+      const body = parseBody(calls[0].init);
+      assert.equal(body.message, "Feedback");
+      assert.equal(Object.hasOwn(body, "bundle_id"), bundleId !== undefined);
+      assert.equal(body.bundle_id, bundleId);
+      assert.equal((calls[0].init.headers as Record<string, string>).Authorization,
+        "Bearer pulse_client_test_1234567890123456789012345678");
+    });
+  }
+
   it("wrapHandler flushes after successful execution", async () => {
     Pulse.configure({
       endpoint: "http://localhost:4000",
