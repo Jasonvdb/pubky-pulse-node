@@ -38,7 +38,8 @@ export interface SendFeedbackOptions {
   sessionId?: string;
   /**
    * Optional legacy bundle metadata, retained for compatibility. The client
-   * key determines the app; this value is not used for app association.
+   * key determines the app. Web/backend app keys skip identifier validation;
+   * Apple/Android app keys require a supplied identifier to match the registered one.
    */
   bundleId?: string;
   /** Override environment (default: "backend"). Validated server-side. */
